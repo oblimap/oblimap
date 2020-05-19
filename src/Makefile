@@ -52,12 +52,12 @@
 
 # Include below the Makefile.include which matches with your fortran compiler:
 include Makefile.gfortran
-#include Makefile.gfortran-mp-4.9-mac
+#include Makefile.gfortran-mp-6-mac
 #include Makefile.gfortran-lisa
 #include Makefile.ifort-lisa
 #include Makefile.ifort-staff.science
-#include Makefile.ftn-cca-ecmwf
 #include Makefile.ifort-stampede
+#include Makefile.ftn-cca-ecmwf
 
 # The OBJ_PATH and the MOD_PATH are defined:
 OBJ_PATH = object-files
@@ -85,8 +85,8 @@ oblimap_gcm_to_im_program_objects = \
         oblimap_configuration_module.o \
         oblimap_read_and_write_module.o \
         oblimap_projection_module.o \
-        oblimap_scan_contributions_module.o \
         oblimap_mapping_module.o \
+        oblimap_scan_contributions_module.o \
         oblimap_gcm_to_im_mapping_module.o \
         oblimap_gcm_to_im_program.o
 
@@ -107,8 +107,8 @@ oblimap_im_to_gcm_program_objects = \
         oblimap_configuration_module.o \
         oblimap_read_and_write_module.o \
         oblimap_projection_module.o \
-        oblimap_scan_contributions_module.o \
         oblimap_mapping_module.o \
+        oblimap_scan_contributions_module.o \
         oblimap_im_to_gcm_mapping_module.o \
         oblimap_im_to_gcm_program.o
 
@@ -129,6 +129,7 @@ oblimap_convert_program_objects = \
         oblimap_configuration_module.o \
         oblimap_read_and_write_module.o \
         oblimap_projection_module.o \
+        oblimap_mapping_module.o \
         oblimap_scan_contributions_module.o \
         oblimap_convert_module.o \
         oblimap_convert_program.o

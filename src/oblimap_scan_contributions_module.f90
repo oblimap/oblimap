@@ -7,17 +7,17 @@
 !
 ! This file is part of OBLIMAP 2.0
 !
-! The scientific documentation of OBLIMAP is published at:
-!  http://www.geosci-model-dev.net/3/13/2010/gmd-3-13-2010.html
-!  http://www.geosci-model-dev-discuss.net/gmd-2016-124/#discussion
+! See Reerink et al. (2010,2016) for OBLIMAP's scientific documentation:
+!  http://www.geosci-model-dev.net/3/13/2010/
+!  http://www.geosci-model-dev.net/9/4111/2016/
 !
-! The OBLIMAP User Guide can be found at:
+! The OBLIMAP User Guide (Reerink, 2016) can be found at:
 !  https://github.com/oblimap/oblimap-2.0/tree/master/documentation
 !
 ! The OBLIMAP code can be downloaded by:
 !  svn checkout https://svn.science.uu.nl/repos/project.oblimap
-! Or from OBLIMAP's Github:
-!  https://github.com/oblimap/oblimap-2.0
+! or from OBLIMAP's Github by:
+!  git clone https://github.com/oblimap/oblimap-2.0
 !
 ! OBLIMAP is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -46,19 +46,6 @@
 !
 
 MODULE oblimap_scan_contributions_module
-  USE oblimap_configuration_module, ONLY: dp
-  IMPLICIT NONE
-
-  TYPE triplet
-    INTEGER  :: row_index     ! row index of nearest point within one quadrant
-    INTEGER  :: column_index  ! column index of nearest point within one quadrant
-    REAL(dp) :: distance      ! distance of this nearest point relative to the IM point (m,n)
-  END TYPE triplet
-
-  ! In case there are no contributions, the distance is set to a huge number: C%large_distance = 1.0E8_dp, and the indices to -999999
- !TYPE(triplet), PARAMETER :: no_contribution = triplet(-999999, -999999, 1.0E8_dp)
-
-
 
 CONTAINS
 
@@ -75,6 +62,7 @@ CONTAINS
     ! file. With the indices and the distances of the contributing points the GCM fields can be mapped fast and simultaneously
     ! on to the IM grid.
     USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type
+    USE oblimap_mapping_module, ONLY: triplet
     IMPLICIT NONE
 
     ! Input variables:
@@ -426,6 +414,7 @@ CONTAINS
     ! file. With the indices and the distances of the contributing points the GCM fields can be mapped fast and simultaneously
     ! on to the IM grid.
     USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type
+    USE oblimap_mapping_module, ONLY: triplet
     IMPLICIT NONE
 
     ! Input variables:
@@ -793,6 +782,7 @@ CONTAINS
     ! C%sid_filename file. With the indices and the distances of the contributing points the IM fields can be
     ! mapped fast and simultaneously on to the GCM grid.
     USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type
+    USE oblimap_mapping_module, ONLY: triplet
     IMPLICIT NONE
 
     ! Input variables:
@@ -1036,6 +1026,7 @@ CONTAINS
     ! C%sid_filename file. With the indices and the distances of the contributing points the IM fields can be
     ! mapped fast and simultaneously on to the GCM grid.
     USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type
+    USE oblimap_mapping_module, ONLY: triplet
     IMPLICIT NONE
 
     ! Input variables:
@@ -1289,6 +1280,7 @@ CONTAINS
   SUBROUTINE write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions, gcm_to_im_direction)
     ! This routine writes the SID file (the file which contains the scanned indices and distances).
     USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type
+    USE oblimap_mapping_module, ONLY: oblimap_ddo_type, oblimap_read_sid_content_file, oblimap_deallocate_ddo
     IMPLICIT NONE
 
     ! Input variables:
@@ -1300,7 +1292,14 @@ CONTAINS
     LOGICAL                           , INTENT(IN) :: gcm_to_im_direction                   ! This variable has to be TRUE for the GCM -> IM mapping direction, and FALSE vice versa.
 
     ! Local variables:
-    INTEGER                                        :: unit_number = 107
+    INTEGER                           , PARAMETER  :: unit_number = 107
+    TYPE(oblimap_ddo_type)                         :: ddo                                   ! The DDO containing all the scanned contributions
+    INTEGER                                        :: p                                     ! Counter which counts over the affected/mapped/target points
+    INTEGER                                        :: q                                     ! Counter over the contributing points at each target point
+
+    ! Reading the contributions of the scanned projection data into the Dynamic Data Object (DDO):
+    ! Output: ddo
+    CALL oblimap_read_sid_content_file(119, C%filename_sid_content, maximum_contributions, amount_of_mapped_points, ddo)
 
     ! Opening the SID file:
     OPEN(UNIT=unit_number, FILE=TRIM(C%sid_filename))
@@ -1413,13 +1412,39 @@ CONTAINS
     END IF
     WRITE(UNIT=unit_number,   FMT='( A        )') '# '
 
+    ! See equation (2.17) and equation (2.19) in Reerink et al. (2010), both cases are treated with the same code:
+    DO p = 1, ddo%total_mapped_points
+     WRITE(UNIT=unit_number, FMT='(3I6)', ADVANCE='NO') ddo%row_index_destination(p), ddo%column_index_destination(p), ddo%total_contributions(p)
+
+     DO q = 1, ddo%total_contributions(p)
+      WRITE(UNIT=unit_number, FMT='(2I6,E23.15)', ADVANCE='NO') ddo%row_index(p,q), ddo%column_index(p,q), ddo%distance(p,q)
+     END DO
+
+     WRITE(UNIT=unit_number, FMT='(A)') ''
+    END DO
+
     ! Closing the the SID file:
     CLOSE(UNIT=unit_number)
 
-    ! Appending the content to the header:
-    CALL SYSTEM('cat '//TRIM(C%filename_sid_content)//' >> '//TRIM(C%sid_filename))
-    CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content))
+    CALL remove_sid_content_file()
+
+    ! Output: -
+    CALL oblimap_deallocate_ddo(ddo)
   END SUBROUTINE write_sid_file
+
+
+
+  SUBROUTINE remove_sid_content_file()
+    ! This routine removes the SID content file.
+    USE oblimap_configuration_module, ONLY: C
+    IMPLICIT NONE
+
+    ! Opening the SID content file:
+    OPEN(UNIT=C%unit_scanning_file_content, FILE=TRIM(C%filename_sid_content))
+
+    ! Closing the the SID content file and remove it:
+    CLOSE(UNIT=C%unit_scanning_file_content, STATUS='delete')
+  END SUBROUTINE remove_sid_content_file
 
 
 

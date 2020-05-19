@@ -1,7 +1,7 @@
-# Configuration for the fortran gfortran-mp-4.9 compiler (Mac OS X 10.10):
+# Configuration for the fortran gfortran-mp-6 compiler (Mac OS X 10.12):
 
 # Compiler names:
-  F90 = gfortran-mp-4.9
+  F90 = gfortran-mp-6
 
 # Setting the path for the netcdf libraries:
   NETCDF_PATH = /opt/local

@@ -7,17 +7,17 @@
 !
 ! This file is part of OBLIMAP 2.0
 !
-! The scientific documentation of OBLIMAP is published at:
-!  http://www.geosci-model-dev.net/3/13/2010/gmd-3-13-2010.html
-!  http://www.geosci-model-dev-discuss.net/gmd-2016-124/#discussion
+! See Reerink et al. (2010,2016) for OBLIMAP's scientific documentation:
+!  http://www.geosci-model-dev.net/3/13/2010/
+!  http://www.geosci-model-dev.net/9/4111/2016/
 !
-! The OBLIMAP User Guide can be found at:
+! The OBLIMAP User Guide (Reerink, 2016) can be found at:
 !  https://github.com/oblimap/oblimap-2.0/tree/master/documentation
 !
 ! The OBLIMAP code can be downloaded by:
 !  svn checkout https://svn.science.uu.nl/repos/project.oblimap
-! Or from OBLIMAP's Github:
-!  https://github.com/oblimap/oblimap-2.0
+! or from OBLIMAP's Github by:
+!  git clone https://github.com/oblimap/oblimap-2.0
 !
 ! OBLIMAP is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -867,7 +867,7 @@ CONTAINS
 
     ! Unit used for the temporal file containing the fast input file content:
     C%unit_scanning_file_content                     = 14111984
-    C%filename_sid_content                           = 'content_sid_file.txt'
+    C%filename_sid_content                           = 'content-sid-file.txt'
 
     ! A predefined large distance (more then the earth circumference) used to initialize distances when searching the nearest projected points:
     C%large_distance                                 = 1.0E8_dp
@@ -963,6 +963,31 @@ CONTAINS
      CALL initialize_config_variables_for_one_config_file(1, config_filename)
     END SELECT
   END SUBROUTINE initialize_config_variables
+
+
+
+  SUBROUTINE check_directory_existence(full_string)
+    ! This subroutine checks whether the directory exists if a directory path is part of an filename.
+    IMPLICIT NONE
+
+    ! Input variables:
+    CHARACTER(LEN=*), INTENT(IN) :: full_string
+
+    ! Local variables:
+    INTEGER                      :: index_of_last_slash
+    LOGICAL                      :: file_exists
+
+    index_of_last_slash = INDEX(trim(full_string), '/', .TRUE.)
+
+    IF(index_of_last_slash /= 0) THEN
+     ! Abort in case the directry in the path of the filename does not exist:
+     INQUIRE(EXIST = file_exists, FILE = full_string(1:index_of_last_slash))
+     IF(.NOT. file_exists) THEN
+      WRITE(UNIT=*,FMT='(/6A/)') C%ERROR,' The directory "', TRIM(full_string(1:index_of_last_slash)), '" for the file "', TRIM(full_string), '" does not exists.'
+      STOP
+     END IF
+    END IF
+  END SUBROUTINE check_directory_existence
 
 
   SUBROUTINE oblimap_licence(program_name)

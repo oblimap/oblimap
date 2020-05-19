@@ -7,17 +7,17 @@
 !
 ! This file is part of OBLIMAP 2.0
 !
-! The scientific documentation of OBLIMAP is published at:
-!  http://www.geosci-model-dev.net/3/13/2010/gmd-3-13-2010.html
-!  http://www.geosci-model-dev-discuss.net/gmd-2016-124/#discussion
+! See Reerink et al. (2010,2016) for OBLIMAP's scientific documentation:
+!  http://www.geosci-model-dev.net/3/13/2010/
+!  http://www.geosci-model-dev.net/9/4111/2016/
 !
-! The OBLIMAP User Guide can be found at:
+! The OBLIMAP User Guide (Reerink, 2016) can be found at:
 !  https://github.com/oblimap/oblimap-2.0/tree/master/documentation
 !
 ! The OBLIMAP code can be downloaded by:
 !  svn checkout https://svn.science.uu.nl/repos/project.oblimap
-! Or from OBLIMAP's Github:
-!  https://github.com/oblimap/oblimap-2.0
+! or from OBLIMAP's Github by:
+!  git clone https://github.com/oblimap/oblimap-2.0
 !
 ! OBLIMAP is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -78,7 +78,7 @@ CONTAINS
     ! The center of the IM grid will coincide with (lamda_M_config,phi_M_config), and the extensions of
     ! the IM grid are determined by the IM grid spacings C%dx and C%dy and the IM grid sizes C%NX and C%NY.
     !
-    USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type, initialize_config_variables, oblimap_licence
+    USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type, check_directory_existence
     USE oblimap_read_and_write_module, ONLY: oblimap_netcdf_file_type, oblimap_open_netcdf_file, create_netcdf_for_gcm_grid, oblimap_read_netcdf_fields, oblimap_write_netcdf_fields, oblimap_close_netcdf_file, reduce_dummy_dimensions
     USE oblimap_scan_contributions_module, ONLY: projecting_the_im_xy_coordinates_to_lonlat, determining_scan_parameters
     IMPLICIT NONE
@@ -94,6 +94,9 @@ CONTAINS
     TYPE(oblimap_netcdf_file_type)                                                       :: im_netcdf_file
     TYPE(oblimap_netcdf_file_type)                                                       :: gcm_netcdf_file
     TYPE(oblimap_scan_parameter_type)                                                    :: advised_scan_parameter
+
+    ! Check whether the directory in the path of C%gcm_created_filename exists:
+    CALL check_directory_existence(C%gcm_created_filename)
 
     ! Opening the IM netcdf file:
     ! Output: im_netcdf_file, x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points
