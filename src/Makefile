@@ -1,9 +1,15 @@
-# File name: Makefile          
-# 
-# Copyright (C) 2009 Thomas Reerink & Michael Kliphuis. This program
-# is distributed under the terms of the GNU General Public License.
+# File name: Makefile
 #
-# This file is part of OBLIMAP.
+# Copyright (C) 2016 Thomas Reerink.
+#
+# This file is distributed under the terms of the
+# GNU General Public License.
+#
+# This file is part of OBLIMAP 2.0
+#
+# OBLIMAP's scientific documentation and its first open source
+# release (see the supplement) is published at:
+# http://www.geosci-model-dev.net/3/13/2010/gmd-3-13-2010.html
 #
 # OBLIMAP is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -12,12 +18,12 @@
 #
 # OBLIMAP is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
-# You should have received a copy of the GNU General Public License    
-# along with OBLIMAP.  If not, see <http://www.gnu.org/licenses/>.
-# 
+# You should have received a copy of the GNU General Public License
+# along with OBLIMAP. If not, see <http://www.gnu.org/licenses/>.
+#
 #
 # OBLIMAP is maintained by:
 #
@@ -28,123 +34,125 @@
 # 3584 CC Utrecht
 # The Netherlands
 #
-# email: <t.reerink@uu.nl>
+# email: tjreerink@gmail.com
 #
-# OBLIMAP is hosted on NeSCForge: NOT YET
-#
-# http://forge.nesc.ac.uk/projects/oblimap/
-#
+
 
 #    Makefile for compiling OBLIMAP
 #
-#    To execute the make file (in the src/ directory) e.g.:
-#     make oblimap_gcm_to_im_program                        
-#     make oblimap_im_to_gcm_program                        
+#    Execute options of this Makefile (in the src/ directory) e.g.:
+#     make clean
+#     make all
+#     make oblimap_gcm_to_im_program
+#     make oblimap_im_to_gcm_program
+#     make oblimap_convert_program
 
+#    For "make" syntax search on "make tutorial", or see:
+#     http://www.gnu.org/software/make/manual/make.html
+
+# Include below the Makefile.include which matches with your fortran compiler:
 include Makefile.gfortran
-#include Makefile.pgf90
-#include Makefile.g95
-#include Makefile.mpfort
+#include Makefile.gfortran-mp-4.9-mac
+#include Makefile.gfortran-lisa
+#include Makefile.ifort-lisa
+#include Makefile.ifort-staff.science
+#include Makefile.ftn-cca-ecmwf
+#include Makefile.ifort-stampede
 
-# Since on some platforms the compiler seems not to be able to put the object 
-# files and modules in any directory other than the current one. If the OBJ_PATH 
-# and MOD_PATH are not specified in the file included above, then we can set it 
-# to any value we like at this point:
-OBJ_PATH ?= obj
-MOD_PATH ?= mod
-        
-# Pattern rules for creating object files from fortran 90 source files
+# The OBJ_PATH and the MOD_PATH are defined:
+OBJ_PATH = object-files
+MOD_PATH = module-files
+
+# Pattern rules for creating object files from *.f90 (fortran 90) source files
 $(OBJ_PATH)/%.o : %.f90
-	mkdir -p $(OBJ_PATH) $(MOD_PATH) && $(F90) $(F90FLAGS) -c -o $@  $<
+	$(F90) $(F90FLAGS) -c -o $@ $<
 
-# This rule is used to build an executable from object files: 
-% : 
+# This rule is used to build an executable from the object files:
+% :
 	$(F90) $(F90FLAGS) -o $@ $^ $(LDFLAGS)
 
-    
+
 
 # =============================================================
-#	BUILDING THE OBLIMAP_GCM_TO_IM_PROGRAM
+#       Building the oblimap_gcm_to_im_program
 # =============================================================
 
-# Source files used for the oblimap_gcm_to_im_program (this program only uses fortran 90 source files):
-OBLIMAP_GCM_TO_IM_PROGRAM_SOURCES = \
-        oblimap_configuration_module.f90 \
-        oblimap_mapping_module.f90 \
-        oblimap_read_and_write_module.f90 \
-        oblimap_projection_module.f90 \
-        oblimap_scan_contributions_module.f90 \
-        oblimap_gcm_to_im_program.f90
-        
-# All object files used for the oblimap_gcm_to_im_program (this program only uses fortran 90 source files):
-OBLIMAP_GCM_TO_IM_PROGRAM_OBJECTS = $(OBLIMAP_GCM_TO_IM_PROGRAM_SOURCES:%.f90=$(OBJ_PATH)/%.o)
+# Adding this program to the list of all programs:
+all_programs += oblimap_gcm_to_im_program
 
-# Update lists of all sources. This is used later on to create a dependency file automatically. See the "deps" target.
-ALL_SOURCES += $(OBLIMAP_GCM_TO_IM_PROGRAM_SOURCES)
+# List of object files for oblimap_gcm_to_im_program:
+oblimap_gcm_to_im_program_objects = \
+        oblimap_configuration_module.o \
+        oblimap_read_and_write_module.o \
+        oblimap_projection_module.o \
+        oblimap_scan_contributions_module.o \
+        oblimap_mapping_module.o \
+        oblimap_gcm_to_im_mapping_module.o \
+        oblimap_gcm_to_im_program.o
 
-# Update a list of all programs, which is used by the "all" target
-ALL_PROGRAMS += oblimap_gcm_to_im_program
-
-oblimap_gcm_to_im_program : $(OBLIMAP_GCM_TO_IM_PROGRAM_OBJECTS) 
+# The executable (the target) depends on the object files:
+oblimap_gcm_to_im_program : $(oblimap_gcm_to_im_program_objects:%=$(OBJ_PATH)/%)
 
 
 
 # =============================================================
-#	BUILDING THE OBLIMAP_IM_TO_GCM_PROGRAM
+#       Building the oblimap_im_to_gcm_program
 # =============================================================
 
-# Source files used for the oblimap_im_to_gcm_program (this program only uses fortran 90 source files):
-OBLIMAP_IM_TO_GCM_PROGRAM_SOURCES = \
-        oblimap_configuration_module.f90 \
-        oblimap_mapping_module.f90 \
-        oblimap_read_and_write_module.f90 \
-        oblimap_projection_module.f90 \
-        oblimap_scan_contributions_module.f90 \
-        oblimap_post_processing_module.f90 \
-        oblimap_im_to_gcm_program.f90
-        
-# All object files used for the oblimap_im_to_gcm_program (this program only uses fortran 90 source files):
-OBLIMAP_IM_TO_GCM_PROGRAM_OBJECTS = $(OBLIMAP_IM_TO_GCM_PROGRAM_SOURCES:%.f90=$(OBJ_PATH)/%.o)
+# Adding this program to the list of all programs:
+all_programs += oblimap_im_to_gcm_program
 
-# Update lists of all sources. This is used later on to create a dependency file automatically. See the "deps" target.
-ALL_SOURCES += $(OBLIMAP_IM_TO_GCM_PROGRAM_SOURCES)
+# List of object files for oblimap_im_to_gcm_program:
+oblimap_im_to_gcm_program_objects = \
+        oblimap_configuration_module.o \
+        oblimap_read_and_write_module.o \
+        oblimap_projection_module.o \
+        oblimap_scan_contributions_module.o \
+        oblimap_mapping_module.o \
+        oblimap_im_to_gcm_mapping_module.o \
+        oblimap_im_to_gcm_program.o
 
-# Update a list of all programs, which is used by the "all" target
-ALL_PROGRAMS += oblimap_im_to_gcm_program
-
-oblimap_im_to_gcm_program : $(OBLIMAP_IM_TO_GCM_PROGRAM_OBJECTS) 
+# The executable (the target) depends on the object files:
+oblimap_im_to_gcm_program : $(oblimap_im_to_gcm_program_objects:%=$(OBJ_PATH)/%)
 
 
 
 # =============================================================
-#	AUTOMATIC DEPENDENCIES
+#       Building the oblimap_convert_program
 # =============================================================
 
-# The dependencies are listed in the file 'deps'. The following rule updates the dependencies
-# automatically with the makedepf90 program. If makedepf90 is not available comment the next
-# two lines, then the already existing deps will be used. (Take care of a real tab).
-##deps : $(ALL_SOURCES)
-##	makedepf90 -b $(OBJ_PATH) $^ > deps
+# Adding this program to the list of all programs:
+all_programs += oblimap_convert_program
 
-include deps
+# List of object files for oblimap_convert_program:
+oblimap_convert_program_objects = \
+        oblimap_configuration_module.o \
+        oblimap_read_and_write_module.o \
+        oblimap_projection_module.o \
+        oblimap_scan_contributions_module.o \
+        oblimap_convert_module.o \
+        oblimap_convert_program.o
+
+# The executable (the target) depends on the object files:
+oblimap_convert_program : $(oblimap_convert_program_objects:%=$(OBJ_PATH)/%)
 
 
 
-# =======================================
-#       CLEANING UP EVERYTHING
-# =======================================
+# =============================================================
+#       Cleaning up everything
+# =============================================================
 
 .PHONY : clean
 
-clean : 
-	rm -fv $(ALL_PROGRAMS) $(OBJ_PATH)/*.o $(MOD_PATH)/*.mod $(MOD_PATH)/*.MOD *.mod *.lst
+clean :
+	rm -fv $(all_programs) $(OBJ_PATH)/*.o $(MOD_PATH)/*.mod *.mod
 
-        
 
-# ==================================
-# 	BUILD EVERYTHING
-# ==================================
+
+# =============================================================
+#       Building everything
+# =============================================================
 
 .PHONY : all
 
-all : $(ALL_PROGRAMS)
+all : $(all_programs)
