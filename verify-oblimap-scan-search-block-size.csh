@@ -6,12 +6,13 @@ if($#argv == 1 || $#argv == 3) then
   if($#argv == 1) then
     # Running and comparing with the benchmark results in the directory: oblimap-results/compare/
     # Run like:
-    #  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/ec-earth-to-im/config_oblimap_ec-earth_to_im_greenland
+    #  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km
 
     set config_filename   = $1
+    set compare_dir       = 'oblimap-results/compare/'
 
     set created_file_name = ` grep '_created_filename_config' ${config_filename} | sed -e 's/.*= .//' -e 's/.$//' `
-    set compare_file_name = 'oblimap-results/compare/'` grep '_created_filename_config' ${config_filename} | sed -e 's/.*= .//' -e 's/.$//' -e 's/.*\///' `
+    set compare_file_name = ${compare_dir}` grep '_created_filename_config' ${config_filename} | sed -e 's/.*= .//' -e 's/.$//' -e 's/.*\///' `
     set command           = ` grep ${config_filename} ${config_filename} | sed -e 's/\\!//' `
     set diff_file_name    = 'ddiff.nc'
 
@@ -30,7 +31,7 @@ if($#argv == 1 || $#argv == 3) then
     # smaller n will be large enough as well. If the scanning mappings differ, then n must be larger, so try again.
     # This script produces a temporary config file in which the scan_search_block_size_config is adjusted and the fast scanning mode is switched on.
     # Run like:
-    #  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/ec-earth-to-im/config_oblimap_ec-earth_to_im_greenland 17 16
+    #  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km 17 16
 
     set config_filename = $1
 
@@ -78,9 +79,9 @@ if($#argv == 1 || $#argv == 3) then
 
 else
  echo ' Needs one argument:'
- echo '  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/ec-earth-to-im/config_oblimap_ec-earth_to_im_greenland'
+ echo '  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km'
  echo ' or needs three arguments:'
- echo '  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/ec-earth-to-im/config_oblimap_ec-earth_to_im_greenland 15 14'
+ echo '  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km 15 14'
  echo ' or for comparing the dynamic scan search block size with for example the full search mode:'
- echo '  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/ec-earth-to-im/config_oblimap_ec-earth_to_im_greenland -1 -3'
+ echo '  ./verify-oblimap-scan-search-block-size.csh config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km -1 -3'
 endif

@@ -1,42 +1,57 @@
- Compilation of the OBLIMAP 2.0 fortran source code:
+ Compilation of the SEQUENTIAL OBLIMAP fortran source code:
 
-  Check which fortran compiler you are using. The default Makefile.include 
-  in the Makefile is
-
+  Check which fortran compiler you are using. The default Makefile include file is:
    Makefile.gfortran
-
   However others can be included instead:
-   Makefile.gfortran-mp-4.9-mac
+   Makefile.gfortran-mp-6-mac
    Makefile.gfortran-lisa
    Makefile.ifort-lisa
-   Makefile.ftn-cca-ecmwf
    Makefile.ifort-stampede
+   Makefile.ftn-cca-ecmwf
 
-  In the Makefile.* one should check the NETCDF path, in our default this is:
-
-   NETCDF_DIR = /usr/local
-
-  After these checks / adjustments you can compile the OBLIMAP source by
+  In these Makefile.* one should check the NETCDF path, in our default this is:
+   NETCDF_PATH = /usr
+  After these checks / adjustments one can compile the OBLIMAP source by
 
    cd src/
    make all
+   cd ../
 
- Default running should be done from the  oblimap-package/  directory, for
- instance with:
-
-   ./src/oblimap_gcm_to_im_program config-files/oblimap/ccsm-to-im/config_oblimap_ccsm_to_im_greenland
-
-  And for the reverse direction with:
-
-   ./src/oblimap_im_to_gcm_program config-files/oblimap/im-to-ccsm/config_oblimap_im_to_ccsm_greenland
-
+  Run oblimap by using a config file. The default gcm to im run example is:
+   ./src/oblimap_gcm_to_im_program config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km
+  and the default example in the reverse direction is:
+   ./src/oblimap_im_to_gcm_program config-files/oblimap/im-to-racmo2.3-greenland/config-oblimap-im-to-racmo2.3-greenland-20x20km
   Or with the tiny script (which includes cpu profiling):
-
    ./oblimap-to-and-fro-mapping.csh
 
-
   The OBLIMAP User Guide provides a more extended description:
-   https://github.com/oblimap/oblimap-2.0/blob/master/documentation/oblimap-user-guide.pdf
+   documentation/oblimap-user-guide.pdf
+  or at the Github:
+   https://github.com/oblimap/oblimap/blob/master/documentation/oblimap-user-guide.pdf
+
+
+
+ Compilation of the PARALLEL OBLIMAP fortran source code:
+
+  Check which fortran compiler you are using. The default Makefile include file is:
+   Makefile.gfortran
+  However others can be included instead (check also their NETCDF path):
+   Makefile-par.gfortran-mac
+   Makefile-par.ifort-lisa
+   Makefile-par.ifort-stampede
+
+  One can compile the OBLIMAP-par source by
+
+   cd src/
+   make -f Makefile-par all
+   cd ../
+
+  Run oblimap-par by using a config file. The default gcm to im run example is:
+   ./src/oblimap_par_gcm_to_im_program config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km
+  and the default example in the reverse direction is:
+   ./src/oblimap_par_im_to_gcm_program config-files/oblimap/im-to-racmo2.3-greenland/config-oblimap-im-to-racmo2.3-greenland-20x20km
+  Or with the tiny script (which includes cpu profiling):
+   ./oblimap-par-to-and-fro-mapping.csh 2
 
  Thomas Reerink
- October 2016
+ May 2020

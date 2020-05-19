@@ -19,7 +19,7 @@ sid_filename_config                                       = './oblimap-sid-files
 nearest_point_assignment_config                           = .FALSE.
 
 ! The name of the file containing the input data for the mapping:
-gcm_input_filename_config                                 = './data/racmo2.3-antarctica/mean-1979-2014-racmo2.3-atmospheric-forcing-fields-antarctica.nc'
+gcm_input_filename_config                                 = './data/external-data-sources/atmospheric-forcing-fields/racmo2.3-antarctica/mean-1979-2014-racmo2.3-atmospheric-forcing-fields-antarctica.nc'
 gcm_record_range_config                                   = 1,1
 
 im_input_filename_config                                  = './forcing-fields-at-IM-antarctica-40x40km.nc'

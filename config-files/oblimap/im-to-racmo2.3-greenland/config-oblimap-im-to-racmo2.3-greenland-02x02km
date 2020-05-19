@@ -19,10 +19,10 @@ sid_filename_config                                       = './oblimap-sid-files
 nearest_point_assignment_config                           = .FALSE.
 
 ! The name of the file containing the input data for the mapping:
-gcm_input_filename_config                                 = './data/racmo2.3-greenland/mean-1958-1989-racmo2.3-atmospheric-forcing-fields-greenland.nc'
+gcm_input_filename_config                                 = './data/external-data-sources/atmospheric-forcing-fields/racmo2.3-greenland/mean-1958-1989-racmo2.3-atmospheric-forcing-fields-greenland.nc'
 gcm_record_range_config                                   = 1,1
 
-im_input_filename_config                                  = './forcing-fields-at-IM-greenland-02x02km.nc'
+im_input_filename_config                                  = './forcing-fields-at-ism-greenland-02x02km.nc'
 im_record_range_config                                    = 1,1
 
 
@@ -138,7 +138,7 @@ invalid_input_value_config(14)                            =     0
 invalid_input_value_config(15)                            =     0
 invalid_input_value_config(16)                            =     0
 
-gcm_created_filename_config                               = './forcing-fields-at-GCM-greenland-02x02km.nc'
+gcm_created_filename_config                               = './forcing-fields-at-gcm-greenland-02x02km.nc'
 protect_file_overwriting_config                           = .FALSE.
 oblimap_message_level_config                              = 0
 /

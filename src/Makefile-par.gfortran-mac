@@ -1,0 +1,60 @@
+# Configuration for the fortran mpif90 wrapper:
+
+# Compiler names:
+  F90 = mpif90
+
+# Setting the path for the general include files and libraries depending on the used platform:
+  PLATFORM_PATH = /opt/local
+
+# Setting the path for the netcdf libraries:
+  NETCDF_PATH = ${PLATFORM_PATH}
+
+# Compiler flags:
+  COMPILER_FLAGS_BASIC    = -O3 -J${MOD_PATH} -Wall -ffree-line-length-none
+  COMPILER_FLAGS_CHECK    = -fbounds-check -fcheck-array-temporaries
+  COMPILER_FLAGS_NETCDF   = -I${NETCDF_PATH}/include
+  COMPILER_FLAGS_PROFILE  = -p
+  COMPILER_FLAGS_VALGRIND = -g
+
+# Compiler flag combination choices:
+  F90FLAGS_CHOICE_1       = ${COMPILER_FLAGS_BASIC} ${COMPILER_FLAGS_CHECK} ${COMPILER_FLAGS_NETCDF} ${COMPILER_FLAGS_PROFILE}
+  F90FLAGS_CHOICE_1B      = ${COMPILER_FLAGS_BASIC} ${COMPILER_FLAGS_CHECK} ${COMPILER_FLAGS_NETCDF}                           ${COMPILER_FLAGS_VALGRIND}
+
+# Compiling the programs the B option is for including the valgrind debugging mode.
+  F90FLAGS                = ${F90FLAGS_CHOICE_1}
+
+# Linking flags of libraries:
+  LINK_FLAGS_NETCDF       = -L${NETCDF_PATH}/lib -lnetcdf -lnetcdff
+
+# Linking flag combination:
+  LDFLAGS                 = ${LINK_FLAGS_NETCDF}
+
+
+
+# Short explanation of the compiler and the linking library FLAGS:
+#
+# the -L is immediately followed by the library-path, thereafter each library libX.a, libY.a, etc are
+# separately listed as -lX -lY etc. 
+#
+#   Compiler flags                    Specification
+#
+#  -O3                                is the  optimalisation flag (causing faster executables)
+#  -J${MOD_PATH}                      is the  path of the directory with all the *.mod files
+#  -Wall                              is the  optimalisation flag
+#  -ffree-line-length-none            is the -ffree-line-length-n, sets n columns after which characters are ignored, -ffree-line-length-none = -ffree-line-length-0
+#  -fbounds-check                     is the  flag for checking array boundaries
+#  -fcheck-array-temporaries          is the  flag for checking array substitution
+#  -p                                 is the  flag for profiling with gmon (better to turn off if using valgrind)
+#  -g                                 is the  flag which should be turned on if the valgrind debugger is used
+#
+# Linking flags of libraries:
+#  -L${NETCDF_PATH}/lib               is the  netcdf library path
+#  -lnetcdf                           is the  netcdf c library
+#  -lnetcdff                          is the  netcdf fortran library
+
+
+# Other gfortran compiler flags (for better checks with compilation):
+# -Wuninitialized -O -ftrapv -fno-automatic -fimplicit-none
+
+# Linking the fortran compiler with  -g -w  for debugging with valgrind but omit profiling while using valgrind:
+# valgrind --log-file=log-valgrind.bug --tool=memcheck --leak-check=yes --show-reachable=yes --num-callers=20 --track-fds=yes ./src/oblimap_par_gcm_to_im_program config-files/oblimap/ccsm-to-im/config_oblimap_ccsm_to_im_greenland
