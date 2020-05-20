@@ -1,4 +1,4 @@
-! ./src/oblimap_gcm_to_im_program config-files/oblimap/ccsm-to-im/config-oblimap-ccsm-to-im-antarctica
+! ./src/oblimap_gcm_to_im_program config-files/oblimap/ccsm-to-im/config-oblimap-ccsm-to-im-antarctica-20x20km
 
 &CONFIG 
 NLON_config                                               =    128                                                ! The number of GCM grid points in the longitude direction
@@ -55,7 +55,7 @@ invalid_input_value_config(1)                             = -9999
 invalid_input_value_config(2)                             = -9999
 invalid_input_value_config(3)                             = -9999
 
-im_created_filename_config                                = 'oblimap-results/ccsm-at-ism-antarctica-Ts-MB-surface-Hs-A.nc'
+im_created_filename_config                                = 'oblimap-results/ccsm-fields-Ts-MB-surface-Hs-A-at-ism-antarctica-20x20km.nc'
 protect_file_overwriting_config                           = .FALSE.
 oblimap_message_level_config                              = 0
 /

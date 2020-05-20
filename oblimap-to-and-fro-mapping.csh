@@ -3,7 +3,7 @@
 
 # Run examples:
 # ./oblimap-to-and-fro-mapping.csh config-files/oblimap/racmo2.3-to-im-greenland/config-oblimap-racmo2.3-to-im-greenland-20x20km config-files/oblimap/im-to-racmo2.3-greenland/config-oblimap-im-to-racmo2.3-greenland-20x20km
-# ./oblimap-to-and-fro-mapping.csh config-files/oblimap/ccsm-to-im/config-oblimap-ccsm-to-im-greenland                           config-files/oblimap/im-to-ccsm/config-oblimap-im-to-ccsm-greenland
+# ./oblimap-to-and-fro-mapping.csh config-files/oblimap/ccsm-to-im/config-oblimap-ccsm-to-im-greenland-20x20km                   config-files/oblimap/im-to-ccsm/config-oblimap-im-to-ccsm-greenland-20x20km
 
 if($#argv == 0 || $#argv == 2) then
 

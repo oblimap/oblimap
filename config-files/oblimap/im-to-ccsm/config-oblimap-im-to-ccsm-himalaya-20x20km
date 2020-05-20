@@ -1,4 +1,4 @@
-! ./src/oblimap_im_to_gcm_program config-files/oblimap/im-to-ccsm/config-oblimap-im-to-ccsm-hemisphere
+! ./src/oblimap_im_to_gcm_program config-files/oblimap/im-to-ccsm/config-oblimap-im-to-ccsm-himalaya-20x20km
 
 &CONFIG 
 NLON_config                                               =    128                                                ! The number of GCM grid points in the longitude direction
@@ -6,17 +6,17 @@ NLAT_config                                               =     64              
 
 NX_config                                                 =    200                                                ! The number of IM grid points in the x-direction
 NY_config                                                 =    200                                                ! The number of IM grid points in the y-direction
-dx_config                                                 =  58000                                                ! The           IM grid size   in the x-direction (in meter)
-dy_config                                                 =  58000                                                ! The           IM grid size   in the y-direction (in meter)
+dx_config                                                 =  20000                                                ! The           IM grid size   in the x-direction (in meter)
+dy_config                                                 =  20000                                                ! The           IM grid size   in the y-direction (in meter)
 
-lambda_M_config                                           =     30                                                ! The longitude coordinate of the middle point of projection (in degrees)
-phi_M_config                                              =     60                                                ! The latitude  coordinate of the middle point of projection (in degrees)
-alpha_stereographic_config                                =     43.5                                              ! alpha determines the standard parallel of the projection (in degrees)
+lambda_M_config                                           =     90                                                ! The longitude coordinate of the middle point of projection (in degrees)
+phi_M_config                                              =     32                                                ! The latitude  coordinate of the middle point of projection (in degrees)
+alpha_stereographic_config                                =     14.5                                              ! alpha determines the standard parallel of the projection (in degrees)
 choice_projection_method_config                           = 'oblique_stereographic_projection' 
 
 scanning_mode_config                                      = .TRUE.
-sid_filename_config                                       = './oblimap-sid-files/sid-file-im-to-ccsm-hemisphere.txt'
-!scan_search_block_size_config                             = 11
+sid_filename_config                                       = './oblimap-sid-files/sid-file-im-to-ccsm-himalaya.txt'
+!scan_search_block_size_config                             = 27
 R_search_interpolation_config                             = 125000
 shepard_exponent_config                                   = 2
 nearest_point_assignment_config                           = .FALSE.
@@ -24,7 +24,7 @@ nearest_point_assignment_config                           = .FALSE.
 gcm_input_filename_config                                 = './data/external-data-sources/atmospheric-forcing-fields/ccsm/ccsm-example-dec-feb-pd.nc'
 gcm_record_range_config                                   = 1,1
 
-im_input_filename_config                                  = 'oblimap-results/ccsm-at-ism-hemisphere-Ts-MB-surface-Hs-A.nc'
+im_input_filename_config                                  = 'oblimap-results/ccsm-fields-Ts-MB-surface-Hs-A-at-ism-himalaya-20x20km.nc'
 im_record_range_config                                    = 1,1
 
 number_of_mapped_fields_config                            = 3
@@ -58,7 +58,7 @@ invalid_input_value_config(1)                             = -9999
 invalid_input_value_config(2)                             = -9999
 invalid_input_value_config(3)                             = -9999
 
-gcm_created_filename_config                               = 'oblimap-results/ccsm-at-gcm-hemisphere-Ts-MB-surface-Hs-A.nc'
+gcm_created_filename_config                               = 'oblimap-results/ccsm-fields-Ts-MB-surface-Hs-A-at-gcm-himalaya-20x20km.nc'
 protect_file_overwriting_config                           = .FALSE.
 oblimap_message_level_config                              = 0
 /
