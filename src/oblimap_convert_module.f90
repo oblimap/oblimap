@@ -1,23 +1,23 @@
 ! File name: oblimap_convert_module.f90
 !
-! Copyright (C) 2016 Thomas Reerink.
+! Copyright (C) 2020 Thomas Reerink.
 !
 ! This file is distributed under the terms of the
 ! GNU General Public License.
 !
-! This file is part of OBLIMAP 2.0
+! This file is part of OBLIMAP 2.2
 !
 ! See Reerink et al. (2010,2016) for OBLIMAP's scientific documentation:
-!  http://www.geosci-model-dev.net/3/13/2010/
-!  http://www.geosci-model-dev.net/9/4111/2016/
+!  https://www.geosci-model-dev.net/3/13/2010/
+!  https://www.geosci-model-dev.net/9/4111/2016/
 !
 ! The OBLIMAP User Guide (Reerink, 2016) can be found at:
-!  https://github.com/oblimap/oblimap-2.0/tree/master/documentation
+!  https://github.com/oblimap/oblimap/blob/master/documentation/
 !
 ! The OBLIMAP code can be downloaded by:
 !  svn checkout https://svn.science.uu.nl/repos/project.oblimap
 ! or from OBLIMAP's Github by:
-!  git clone https://github.com/oblimap/oblimap-2.0
+!  git clone https://github.com/oblimap/oblimap
 !
 ! OBLIMAP is free software: you can redistribute it and/or modify
 ! it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@
 ! GNU General Public License for more details.
 !
 ! You should have received a copy of the GNU General Public License
-! along with OBLIMAP. If not, see <http://www.gnu.org/licenses/>.
+! along with OBLIMAP. If not, see https://www.gnu.org/licenses/
 !
 !
 ! OBLIMAP is maintained by:
