@@ -1,0 +1,9 @@
+! ./src/fortran_mpi_example_program config-files/config-mpi-example
+
+&CONFIG 
+NX_config                                                 =       4
+NY_config                                                 =       3
+
+created_filename_config                                   = 'data-output.txt'
+enable_color_messaging_in_terminal_config                 = .TRUE.
+/

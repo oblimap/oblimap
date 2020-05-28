@@ -1,0 +1,25 @@
+ Compilation of the fortran source code of this kind of "hello world" example
+ for investigating how to work with MPI_WIN_ALLOCATE_SHARED:
+
+  Check which fortran compiler you are using. The default Makefile include file is:
+   Makefile.gfortran
+  However others can be included instead:
+   Makefile.gfortran-mp-6-mac
+   Makefile.gfortran-lisa
+   Makefile.ifort-lisa
+   Makefile.ifort-staff.science
+   Makefile.mpif90
+
+  Compilation of this source goes by
+
+   cd src/
+   make all
+   cd ../
+
+  Run this program by using a config file. The defaultrun example is:
+   mpiexec -n 2 ./src/fortran_mpi_win_allocate_shared_example_program config-files/config-mpi-example
+  Or run it with the long-local-run.csh script (in its own run directory):
+   ./long-local-run.csh fortran_mpi_win_allocate_shared_example_program config-files/config-mpi-example test
+
+ Thomas Reerink
+ May 2020
