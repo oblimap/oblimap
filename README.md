@@ -1,6 +1,8 @@
 # oblimap
 OBLIMAP: a fast coupler for coupling ice sheet models with climate models
 
+<img src="https://github.com/oblimap/oblimap/blob/master/documentation/figures/oblimap-user-guide-figure-1.png" alt="oblimap coupling" align="right" width="400">
+
 # abstract
 OBLIMAP [Reerink et al., [2010](https://www.geosci-model-dev.net/3/13/2010/gmd-3-13-2010.html), 
 [2016](https://www.geosci-model-dev.net/9/4111/2016/gmd-9-4111-2016.html)] is a mapping technique for exchanging climate 
