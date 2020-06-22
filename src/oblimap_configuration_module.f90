@@ -127,8 +127,8 @@ MODULE oblimap_configuration_module
       REAL(dp)                                   :: R_search_interpolation_config                    = 16000.0_dp                                           ! config variable
       INTEGER                                    :: scan_search_block_size_config                    = -3                                                   ! config variable
       INTEGER                                    :: scan_search_block_size_step_config               = 2                                                    ! config variable
-      CHARACTER(LEN=256)                         :: sid_filename_config                              = 'sid-no-name.txt'                                    ! config variable 
-      CHARACTER(LEN=256)                         :: backward_sid_filename_config                     = 'backward-sid-no-name.txt'                           ! config variable 
+      CHARACTER(LEN=256)                         :: sid_filename_config                              = 'sid-no-name.txt'                                    ! config variable
+      CHARACTER(LEN=256)                         :: backward_sid_filename_config                     = 'backward-sid-no-name.txt'                           ! config variable
       CHARACTER(LEN=256)                         :: im_input_filename_config                         = 'im-input-no-name.nc'                                ! config variable
       LOGICAL                                    :: use_prefabricated_im_grid_coordinates_config     = .FALSE.                                              ! config variable
       CHARACTER(LEN=256)                         :: prefabricated_im_grid_filename_config            = 'prefabricated-im-grid-coordinates-no-name.nc'       ! config variable
@@ -981,10 +981,10 @@ CONTAINS
 
     IF(index_of_last_slash /= 0) THEN
      ! Abort in case the directry in the path of the filename does not exist:
-     INQUIRE(EXIST = file_exists, FILE = full_string(1:index_of_last_slash))
+     INQUIRE(EXIST = file_exists, DIRECTORY = full_string(1:index_of_last_slash))
      IF(.NOT. file_exists) THEN
       WRITE(UNIT=*,FMT='(/6A/)') C%ERROR,' The directory "', TRIM(full_string(1:index_of_last_slash)), '" for the file "', TRIM(full_string), '" does not exists.'
-      STOP
+      call abort()
      END IF
     END IF
   END SUBROUTINE check_directory_existence
