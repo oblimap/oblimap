@@ -46,6 +46,7 @@
 !
 
 MODULE oblimap_configuration_module
+      use mpi_f08
       IMPLICIT NONE
 
       ! PRECISION
@@ -298,10 +299,13 @@ MODULE oblimap_configuration_module
 
       ! This TYPE contains variables which are related to the parallel OBLIMAP implementation using MPI.
       TYPE parallel_type
-        INTEGER :: processor_id_process_dependent
-        INTEGER :: number_of_processors
-        INTEGER :: max_nr_of_lines_per_partition_block ! The maximum numberr of lines per partition block
-        INTEGER :: psi_process_dependent               ! Partition starting index
+        integer :: nx0, nx1
+        integer :: ny0, ny1
+        integer :: nlon0, nlon1
+        integer :: nlat0, nlat1
+        type(MPI_COMM) :: shared_comm
+        integer :: rank, nprocs
+        integer :: rank_shared, nshared_procs
       END TYPE parallel_type
 
       ! PAR is the 'struct' containing the parallel OBLIMAP implementation using MPI.

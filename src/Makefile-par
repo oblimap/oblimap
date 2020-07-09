@@ -67,6 +67,9 @@ MOD_PATH = module-files
 $(OBJ_PATH)/%.o : %.f90
 	$(F90) $(F90FLAGS) -c -o $@ $<
 
+$(OBJ_PATH)/%.o : %.F90
+	$(F90) $(F90FLAGS) -c -o $@ $<
+
 # This rule is used to build an executable from the object files:
 % :
 	$(F90) $(F90FLAGS) -o $@ $^ $(LDFLAGS)
@@ -81,14 +84,14 @@ $(OBJ_PATH)/%.o : %.f90
 all_programs += oblimap_par_gcm_to_im_program
 
 # List of object files for oblimap_par_gcm_to_im_program:
-oblimap_par_gcm_to_im_program_objects = \
-        oblimap_configuration_module.o \
-        oblimap_read_and_write_module.o \
-        oblimap_projection_module.o \
-        oblimap_mapping_module.o \
-        oblimap_par_scan_contributions_module.o \
-        oblimap_gcm_to_im_mapping_module.o \
-        oblimap_par_gcm_to_im_program.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_configuration_module.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_par_read_and_write_module.o
+oblimap_par_gcm_to_im_program_objects+=mpi_helpers.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_projection_module.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_mapping_module.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_par_scan_contributions_module.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_par_gcm_to_im_mapping_module.o
+oblimap_par_gcm_to_im_program_objects+=oblimap_par_gcm_to_im_program.o
 
 # The executable (the target) depends on the object files:
 oblimap_par_gcm_to_im_program : $(oblimap_par_gcm_to_im_program_objects:%=$(OBJ_PATH)/%)
@@ -103,14 +106,14 @@ oblimap_par_gcm_to_im_program : $(oblimap_par_gcm_to_im_program_objects:%=$(OBJ_
 all_programs += oblimap_par_im_to_gcm_program
 
 # List of object files for oblimap_par_im_to_gcm_program:
-oblimap_par_im_to_gcm_program_objects = \
-        oblimap_configuration_module.o \
-        oblimap_read_and_write_module.o \
-        oblimap_projection_module.o \
-        oblimap_mapping_module.o \
-        oblimap_par_scan_contributions_module.o \
-        oblimap_im_to_gcm_mapping_module.o \
-        oblimap_par_im_to_gcm_program.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_configuration_module.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_par_read_and_write_module.o
+oblimap_par_im_to_gcm_program_objects+=mpi_helpers.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_projection_module.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_mapping_module.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_par_scan_contributions_module.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_im_to_gcm_mapping_module.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_par_im_to_gcm_program.o
 
 # The executable (the target) depends on the object files:
 oblimap_par_im_to_gcm_program : $(oblimap_par_im_to_gcm_program_objects:%=$(OBJ_PATH)/%)

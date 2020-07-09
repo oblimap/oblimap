@@ -63,19 +63,22 @@ CONTAINS
     ! on to the IM grid.
     USE oblimap_configuration_module, ONLY: dp, C, PAR, oblimap_scan_parameter_type
     USE oblimap_mapping_module, ONLY: triplet
-    USE MPI
+    use mpi_helpers_mod
+    use mpi_f08
     IMPLICIT NONE
 
     ! Input variables:
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
     TYPE(oblimap_scan_parameter_type)        , INTENT(IN) :: advised_scan_parameter            ! The struct containing the crucial scan parameters.
 
     ! Local variables:
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT)             :: x_coordinates_of_gcm_grid_points  ! The x-coordinates of the GCM points projected on S'
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT)             :: y_coordinates_of_gcm_grid_points  ! The y-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: x_coordinates_of_gcm_grid_points  ! The x-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: y_coordinates_of_gcm_grid_points  ! The y-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: x_coordinates_of_gcm_grid_points_ ! The x-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: y_coordinates_of_gcm_grid_points_ ! The y-coordinates of the GCM points projected on S'
     LOGICAL                                               :: latitude_parallel_to_grid_numbers ! True if the latitudes increase in the same direction as the grid numbers increase, this depends on the input dataset
     INTEGER                                               :: i, j
     INTEGER                                               :: m, n
@@ -132,6 +135,16 @@ CONTAINS
      latitude_parallel_to_grid_numbers = .FALSE.
     END IF
 
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , x_coordinates_of_gcm_grid_points &
+                     , x_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , y_coordinates_of_gcm_grid_points &
+                     , y_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+
     ! Projection of the GCM coordinates to the IM coordinates with the oblique stereographic projection:
     ! Output: x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points
     CALL projecting_the_gcm_lonlat_coordinates_to_xy(lon_gcm, lat_gcm, x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points)
@@ -152,18 +165,14 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%processor_id_process_dependent
+    WRITE(process_label, '(I0.4)') PAR%rank_shared
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
 
-    m_start = PAR%psi_process_dependent
-    IF(PAR%processor_id_process_dependent == PAR%number_of_processors - 1) THEN
-     m_end = C%NX
-    ELSE
-     m_end = PAR%psi_process_dependent + PAR%max_nr_of_lines_per_partition_block - 1
-    END IF
+    m_start = PAR%nx0
+    m_end = PAR%nx1
 
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      ! For each IM grid point the four nearest projected GCM points are determined:
      WRITE(UNIT=*,FMT='(A)') '  The progress of the OBLIMAP scanning phase is at:'
     END IF
@@ -171,20 +180,22 @@ CONTAINS
     !!
     wall_clock_time_start = MPI_WTIME()
   !!DO m = 1, C%NX
-    DO m = m_start, m_end
-      IF(m >= m_message .AND. PAR%processor_id_process_dependent == 0) THEN
+  ! TODO invert loops m -> n => n -> m
+    DO m = PAR%nx0, PAR%nx1
+      IF(m >= m_message .AND. PAR%rank_shared == 0) THEN
        IF(C%oblimap_message_level == 0) THEN
-        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(m, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %'
-        m_message = m_message + 0.10_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(m, dp) / REAL(PAR%nx1-PAR%nx0, dp), ' %'
+        m_message = m_message + 0.10_dp * (PAR%nx1-PAR%nx0)
        ELSE
-        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(m, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %,  at  m = ', m
-        m_message = m_message + 0.05_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(m, dp) / REAL(PAR%nx1-PAR%nx0, dp), ' %,  at  m = ', m
+        m_message = m_message + 0.05_dp * (PAR%nx1-PAR%nx0)
        END IF
       END IF
-    DO n = 1, C%NY
+    !DO n = 1, C%NY
+    DO n = PAR%ny0, PAR%ny1
 
     !!IF(C%full_scanning_mode .OR. (m == 1 .AND. n == 1)) THEN
-      IF(C%full_scanning_mode .OR. (m == m_start .AND. n == 1)) THEN
+      IF(C%full_scanning_mode .OR. (m == PAR%nx0 .AND. n == 1)) THEN
        ! For the very first point always a full scan is conducted. In case the full_scanning_mode = TRUE, the full scan is conducted at any point
        do_full_scan = .TRUE.
        pivot_contribution = no_contribution
@@ -202,7 +213,7 @@ CONTAINS
        do_full_scan = .FALSE.
        pivot_contribution = nearest_contribution(m,n-1)
     !!ELSE IF(m == 1) THEN
-      ELSE IF(m == m_start) THEN
+      ELSE IF(m == PAR%nx0) THEN
        ! Low frequent situation (If no neighbour contribution at the same row is found, it is not possible to try the previous row, because m == 1 is the lowest and first scanned row)
        do_full_scan = .TRUE.
        pivot_contribution = no_contribution
@@ -367,8 +378,9 @@ CONTAINS
         END IF
 
         ! See equation (2.17) in Reerink et al. (2010):
-        DO i = i_start, i_end
+        ! profile original loop
         DO j = j_start, j_end
+        DO i = i_start, i_end
           IF(mask(i,j)) THEN
 
            ! Determine the quadrant in which the projected point lies relative to the considered grid point:
@@ -416,14 +428,14 @@ CONTAINS
        ! The nearest contribution is selected:
        nearest_contribution(m,n) = contribution(MINLOC(contribution(:,m,n)%distance, 1),m,n)
 
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
        DO loop = 1, 4
         ! Filter the appropriate contributions (leave out the quadrants in which no contributing point is found, e.g. at the grid border):
         IF(contribution(loop,m,n)%distance /= C%large_distance) THEN
-         WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
+         WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
         END IF
        END DO
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(A)') ''
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
        amount_of_mapped_points = amount_of_mapped_points + 1
       END IF
 
@@ -435,7 +447,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -443,7 +455,7 @@ CONTAINS
       OPEN(7000, file='scan-phase-times.txt', status="new", action="write")
      END IF
      ! The 0.9 is an adhoc measured mean for the case 1 processor is used, this is platform dependent:
-     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%number_of_processors, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   gcm-to-im-quadrant'
+     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%nprocs, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   gcm-to-im-quadrant'
     END IF
 
     IF(C%scan_search_block_size == -3) highest_scan_search_block_size = highest_scan_search_block_size - 2
@@ -451,7 +463,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -467,16 +479,16 @@ CONTAINS
     number_points_no_contribution  = number_points_no_contribution_reduced
 
     ! Output: -
-    IF(PAR%processor_id_process_dependent == 0) &
+    IF(PAR%rank_shared == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions = 4, gcm_to_im_direction = .TRUE.)
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
-    DO process_counter = 0, PAR%number_of_processors - 1
-     IF(process_counter == PAR%processor_id_process_dependent) THEN
+    DO process_counter = 0, PAR%nprocs - 1
+     IF(process_counter == PAR%rank_shared) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
-     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%processor_id_process_dependent))
+     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
      END IF
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
@@ -494,7 +506,8 @@ CONTAINS
     ! on to the IM grid.
     USE oblimap_configuration_module, ONLY: dp, C, PAR, oblimap_scan_parameter_type
     USE oblimap_mapping_module, ONLY: triplet
-    USE MPI
+    USE mpi_f08
+    use mpi_helpers_mod
     IMPLICIT NONE
 
     ! Input variables:
@@ -507,8 +520,10 @@ CONTAINS
     ! Local variables:
     INTEGER                                               :: max_size
     INTEGER                                               :: status
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT)             :: x_coordinates_of_gcm_grid_points  ! The x-coordinates of the GCM points projected on S'
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT)             :: y_coordinates_of_gcm_grid_points  ! The y-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: x_coordinates_of_gcm_grid_points  ! The x-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: y_coordinates_of_gcm_grid_points  ! The y-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: x_coordinates_of_gcm_grid_points_ ! The x-coordinates of the GCM points projected on S'
+    REAL(dp),      DIMENSION(:,:), pointer                :: y_coordinates_of_gcm_grid_points_ ! The y-coordinates of the GCM points projected on S'
     LOGICAL                                               :: latitude_parallel_to_grid_numbers ! True if the latitudes increase in the same direction as the grid numbers increase, this depends on the input dataset
     INTEGER                                               :: i, j
     INTEGER                                               :: m, n
@@ -565,6 +580,16 @@ CONTAINS
      latitude_parallel_to_grid_numbers = .FALSE.
     END IF
 
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , x_coordinates_of_gcm_grid_points &
+                     , x_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , y_coordinates_of_gcm_grid_points &
+                     , y_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+
     ! The devision by 1000 is to prevent the failure of CEILING with large numbers:
     max_size = CEILING(MAX(4._dp * C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)), &
                                    C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)))  * C%oblimap_allocate_factor)
@@ -596,36 +621,34 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%processor_id_process_dependent
+    WRITE(process_label, '(I0.4)') PAR%rank_shared
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
 
-    m_start = PAR%psi_process_dependent
-    IF(PAR%processor_id_process_dependent == PAR%number_of_processors - 1) THEN
-     m_end = C%NX
-    ELSE
-     m_end = PAR%psi_process_dependent + PAR%max_nr_of_lines_per_partition_block - 1
-    END IF
+    m_start = PAR%nx0
+    m_end = PAR%nx1
 
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      ! For each IM grid point the four nearest projected GCM points are determined:
      WRITE(UNIT=*,FMT='(A)') '  The progress of the OBLIMAP scanning phase is at:'
     END IF
 
     !!
     wall_clock_time_start = MPI_WTIME()
+  ! TODO invert loops m -> n => n -> m
   !!DO m = 1, C%NX
-    DO m = m_start, m_end
-      IF(m >= m_message .AND. PAR%processor_id_process_dependent == 0) THEN
+    DO m = PAR%nx0, PAR%nx1
+      IF(m >= m_message .AND. PAR%rank_shared == 0) THEN
        IF(C%oblimap_message_level == 0) THEN
-        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(m, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %'
-        m_message = m_message + 0.10_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(m, dp) / REAL((PAR%nx1-PAR%nx0), dp), ' %'
+        m_message = m_message + 0.10_dp * (PAR%nx1-PAR%nx0)
        ELSE
-        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(m, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %,  at  m = ', m
-        m_message = m_message + 0.05_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(m, dp) / REAL((PAR%nx1-PAR%nx0), dp), ' %,  at  m = ', m
+        m_message = m_message + 0.05_dp * (PAR%nx1-PAR%nx0)
        END IF
       END IF
-    DO n = 1, C%NY
+    !DO n = 1, C%NY
+    DO n = PAR%ny0, PAR%ny1
 
     !!IF(C%full_scanning_mode .OR. (m == 1 .AND. n == 1)) THEN
       IF(C%full_scanning_mode .OR. (m == m_start .AND. n == 1)) THEN
@@ -812,8 +835,9 @@ CONTAINS
         END IF
 
         ! See equation (2.19) in Reerink et al. (2010):
-        DO i = i_start, i_end
+        ! profile original loop
         DO j = j_start, j_end
+        DO i = i_start, i_end
           IF(mask(i,j)) THEN
 
            projected_gcm%row_index    = i
@@ -853,11 +877,11 @@ CONTAINS
        ! The nearest contribution is selected:
        nearest_contribution(m,n) = contribution(MINLOC(contribution(:,m,n)%distance, 1),m,n)
 
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
        DO loop = 1, count_contributions
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
        END DO
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(A)') ''
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
        amount_of_mapped_points = amount_of_mapped_points + 1
       END IF
 
@@ -869,7 +893,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -877,7 +901,7 @@ CONTAINS
       OPEN(7000, file='scan-phase-times.txt', status="new", action="write")
      END IF
      ! The 0.9 is an adhoc measured mean for the case 1 processor is used, this is platform dependent:
-     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%number_of_processors, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   gcm-to-im-quadrant'
+     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%nprocs, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   gcm-to-im-quadrant'
     END IF
 
     IF(C%scan_search_block_size == -3) highest_scan_search_block_size = highest_scan_search_block_size - 2
@@ -887,7 +911,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -907,16 +931,16 @@ CONTAINS
     maximum_contributions          = maximum_contributions_reduced
 
     ! Output: -
-    IF(PAR%processor_id_process_dependent == 0) &
+    IF(PAR%rank_shared == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions, gcm_to_im_direction = .TRUE.)
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
-    DO process_counter = 0, PAR%number_of_processors - 1
-     IF(process_counter == PAR%processor_id_process_dependent) THEN
+    DO process_counter = 0, PAR%nprocs - 1
+     IF(process_counter == PAR%rank_shared) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
-     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%processor_id_process_dependent))
+     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
      END IF
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
@@ -1022,18 +1046,14 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%processor_id_process_dependent
+    WRITE(process_label, '(I0.4)') PAR%rank_shared
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
 
-    i_start = PAR%psi_process_dependent
-    IF(PAR%processor_id_process_dependent == PAR%number_of_processors - 1) THEN
-     i_end = C%NLON
-    ELSE
-     i_end = PAR%psi_process_dependent + PAR%max_nr_of_lines_per_partition_block - 1
-    END IF
+    i_start = PAR%nlon0
+    i_end = PAR%nlat1
 
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      ! For each GCM grid point the four nearest projected IM points are determined:
      WRITE(UNIT=*,FMT='(A)') '  The progress of the OBLIMAP scanning phase is at:'
     END IF
@@ -1042,16 +1062,17 @@ CONTAINS
     wall_clock_time_start = MPI_WTIME()
   !!DO i = 1, C%NLON
     DO i = i_start, i_end
-      IF(i >= i_message .AND. PAR%processor_id_process_dependent == 0) THEN
+      IF(i >= i_message .AND. PAR%rank_shared == 0) THEN
        IF(C%oblimap_message_level == 0) THEN
-        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(i, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %'
-        i_message = i_message + 0.10_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(i, dp) / REAL((PAR%nx1-PAR%nx0), dp), ' %'
+        i_message = i_message + 0.10_dp * (PAR%nx1-PAR%nx0)
        ELSE
-        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(i, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %,  at  i = ', i
-        i_message = i_message + 0.05_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(i, dp) / REAL((PAR%nx1-PAR%nx0), dp), ' %,  at  i = ', i
+        i_message = i_message + 0.05_dp * (PAR%nx1-PAR%nx0)
        END IF
       END IF
-    DO j = 1, C%NLAT
+    !DO j = 1, C%NLAT
+    DO j = PAR%nlat0, PAR%nlat1
       IF(mapping_participation_mask(i,j) == 1) THEN
 
        ! Because of the mapping_participation_mask only for a part of the GCM grid points there are contributions available, however earlier scanned
@@ -1141,8 +1162,9 @@ CONTAINS
         END IF
 
         ! See equation (2.17) in Reerink et al. (2010):
-        DO m = m_start, m_end
+        ! TODO profile original loop
         DO n = n_start, n_end
+        DO m = m_start, m_end
           IF(mask(m,n)) THEN
 
            ! Determine the quadrant in which the projected point lies relative to the considered grid point:
@@ -1186,14 +1208,14 @@ CONTAINS
         ! The nearest contribution is selected:
         nearest_contribution(i,j) = contribution(MINLOC(contribution(:,i,j)%distance, 1),i,j)
 
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
         DO loop = 1, 4
          ! Filter the appropriate contributions (leave out the quadrants in which no contributing point is found, e.g. at the grid border):
          IF(contribution(loop,i,j)%distance /= C%large_distance) THEN
-          WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
+          WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
          END IF
         END DO
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(A)') ''
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
         amount_of_mapped_points = amount_of_mapped_points + 1
        END IF
 
@@ -1208,7 +1230,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -1216,7 +1238,7 @@ CONTAINS
       OPEN(7000, file='scan-phase-times.txt', status="new", action="write")
      END IF
      ! The 0.9 is an adhoc measured mean for the case 1 processor is used, this is platform dependent:
-     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%number_of_processors, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   im-to-gcm-quadrant'
+     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%nprocs, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   im-to-gcm-quadrant'
     END IF
 
     IF(C%scan_search_block_size == -3) highest_scan_search_block_size = highest_scan_search_block_size - 2
@@ -1224,7 +1246,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -1240,16 +1262,16 @@ CONTAINS
     number_points_no_contribution  = number_points_no_contribution_reduced
 
     ! Output: -
-    IF(PAR%processor_id_process_dependent == 0) &
+    IF(PAR%rank_shared == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions = 4, gcm_to_im_direction = .FALSE.)
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
-    DO process_counter = 0, PAR%number_of_processors - 1
-     IF(process_counter == PAR%processor_id_process_dependent) THEN
+    DO process_counter = 0, PAR%nprocs - 1
+     IF(process_counter == PAR%rank_shared) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
-     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%processor_id_process_dependent))
+     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
      END IF
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
@@ -1357,18 +1379,14 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%processor_id_process_dependent
+    WRITE(process_label, '(I0.4)') PAR%rank_shared
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
 
-    i_start = PAR%psi_process_dependent
-    IF(PAR%processor_id_process_dependent == PAR%number_of_processors - 1) THEN
-     i_end = C%NLON
-    ELSE
-     i_end = PAR%psi_process_dependent + PAR%max_nr_of_lines_per_partition_block - 1
-    END IF
+    i_start = PAR%nx0
+    i_end = PAR%nx1
 
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      ! For each GCM grid point the four nearest projected IM points are determined:
      WRITE(UNIT=*,FMT='(A)') '  The progress of the OBLIMAP scanning phase is at:'
     END IF
@@ -1377,16 +1395,17 @@ CONTAINS
     wall_clock_time_start = MPI_WTIME()
   !!DO i = 1, C%NLON
     DO i = i_start, i_end
-      IF(i >= i_message .AND. PAR%processor_id_process_dependent == 0) THEN
+      IF(i >= i_message .AND. PAR%rank_shared == 0) THEN
        IF(C%oblimap_message_level == 0) THEN
-        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(i, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %'
-        i_message = i_message + 0.10_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A    )') 100._dp * REAL(i, dp) / REAL((PAR%nx1-PAR%nx0), dp), ' %'
+        i_message = i_message + 0.10_dp * (PAR%nx1-PAR%nx0)
        ELSE
-        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(i, dp) / REAL(PAR%max_nr_of_lines_per_partition_block, dp), ' %,  at  i = ', i
-        i_message = i_message + 0.05_dp * PAR%max_nr_of_lines_per_partition_block
+        WRITE(UNIT=*,FMT='(F9.1, A, I5)') 100._dp * REAL(i, dp) / REAL((PAR%nx1-PAR%nx0), dp), ' %,  at  i = ', i
+        i_message = i_message + 0.05_dp * (PAR%nx1-PAR%nx0)
        END IF
       END IF
-    DO j = 1, C%NLAT
+    !DO j = 1, C%NLAT
+    DO j = PAR%nlat0, PAR%nlat1
       IF(mapping_participation_mask(i,j) == 1) THEN
 
        ! Because of the mapping_participation_mask only for a part of the GCM grid points there are contributions available, however earlier scanned
@@ -1479,8 +1498,9 @@ CONTAINS
         END IF
 
         ! See equation (2.19) in Reerink et al. (2010):
-        DO m = m_start, m_end
+        ! TODO profile original loop
         DO n = n_start, n_end
+        DO m = m_start, m_end
           IF(mask(m,n)) THEN
 
            projected_im%row_index    = m
@@ -1516,11 +1536,11 @@ CONTAINS
         ! The nearest contribution is selected:
         nearest_contribution(i,j) = contribution(MINLOC(contribution(:,i,j)%distance, 1),i,j)
 
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
         DO loop = 1, count_contributions
-         WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
+         WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
         END DO
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent, FMT='(A)') ''
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
         amount_of_mapped_points = amount_of_mapped_points + 1
        END IF
 
@@ -1535,7 +1555,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%processor_id_process_dependent == 0) THEN
+    IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -1543,7 +1563,7 @@ CONTAINS
       OPEN(7000, file='scan-phase-times.txt', status="new", action="write")
      END IF
      ! The 0.9 is an adhoc measured mean for the case 1 processor is used, this is platform dependent:
-     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%number_of_processors, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   im-to-gcm-quadrant'
+     WRITE(UNIT=7000, FMT='(I4, 2F8.1, E24.16, A)') PAR%nprocs, 100._dp * cumulated_processor_time_reduced / 0.9_dp, 100._dp * 0.9_dp / cumulated_processor_time_reduced, cumulated_processor_time_reduced, '   im-to-gcm-quadrant'
     END IF
 
     IF(C%scan_search_block_size == -3) highest_scan_search_block_size = highest_scan_search_block_size - 2
@@ -1553,7 +1573,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%processor_id_process_dependent)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -1573,16 +1593,16 @@ CONTAINS
     maximum_contributions          = maximum_contributions_reduced
 
     ! Output: -
-    IF(PAR%processor_id_process_dependent == 0) &
+    IF(PAR%rank_shared == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions, gcm_to_im_direction = .FALSE.)
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
-    DO process_counter = 0, PAR%number_of_processors - 1
-     IF(process_counter == PAR%processor_id_process_dependent) THEN
+    DO process_counter = 0, PAR%nprocs - 1
+     IF(process_counter == PAR%rank_shared) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
-     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%processor_id_process_dependent))
+     !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
      END IF
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
@@ -1737,41 +1757,58 @@ CONTAINS
   SUBROUTINE projecting_the_gcm_lonlat_coordinates_to_xy(lon_gcm, lat_gcm, x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points)
     ! This routine projects the GCM coordinates on the requested plane S' which coincides with the IM grid,
     ! with an oblique stereographic or an oblique lambert equal area projection.
-    USE oblimap_configuration_module, ONLY: dp, C
+    USE oblimap_configuration_module, ONLY: dp, C, PAR
     USE oblimap_projection_module, ONLY: oblique_sg_projection, oblique_sg_projection_ellipsoid_snyder, &
       oblique_laea_projection_snyder, oblique_laea_projection_ellipsoid_snyder, rotation_projection
     IMPLICIT NONE
 
     ! Input variables:
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(IN)  :: lon_gcm                          ! longitude coordinates (degrees) of GCM grid
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(IN)  :: lat_gcm                          ! latitude coordinates  (degrees) of GCM grid
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: lon_gcm                          ! longitude coordinates (degrees) of GCM grid
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: lat_gcm                          ! latitude coordinates  (degrees) of GCM grid
 
     ! Output variables:
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(OUT) :: x_coordinates_of_gcm_grid_points ! The x-coordinates of the GCM points projected on S'
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(OUT) :: y_coordinates_of_gcm_grid_points ! The y-coordinates of the GCM points projected on S'
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: x_coordinates_of_gcm_grid_points ! The x-coordinates of the GCM points projected on S'
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: y_coordinates_of_gcm_grid_points ! The y-coordinates of the GCM points projected on S'
 
     ! Local variables:
     INTEGER                                         :: i, j
 
     ! Determine the x,y coordinates of each GCM longitude-latitude coordinate after
     ! The oblique stereographic projection on the projection plane S'
-    DO i = 1, C%NLON
-    DO j = 1, C%NLAT
-      ! Output: x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j)
-      SELECT CASE(C%choice_projection_method)
-      CASE('oblique_stereographic_projection','oblique_stereographic_projection_snyder')
-       CALL oblique_sg_projection(                                  lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
-      CASE('oblique_stereographic_projection_ellipsoid_snyder')
-       CALL oblique_sg_projection_ellipsoid_snyder(                 lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
-      CASE('oblique_lambert_equal-area_projection_snyder')
-       CALL oblique_laea_projection_snyder(                         lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
-      CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
-       CALL oblique_laea_projection_ellipsoid_snyder(               lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
-      CASE('rotation_projection')
-       CALL rotation_projection(                                    lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
-      END SELECT
-    END DO
-    END DO
+    ! TODO profile original loop
+    ! Output: x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j)
+    SELECT CASE(C%choice_projection_method)
+    CASE('oblique_stereographic_projection','oblique_stereographic_projection_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_sg_projection(                                  lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
+        END DO
+      END DO
+    CASE('oblique_stereographic_projection_ellipsoid_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_sg_projection_ellipsoid_snyder(                 lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
+        END DO
+      END DO
+    CASE('oblique_lambert_equal-area_projection_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_laea_projection_snyder(                         lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
+        END DO
+      END DO
+    CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_laea_projection_ellipsoid_snyder(               lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
+        END DO
+      END DO
+    CASE('rotation_projection')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL rotation_projection(                                    lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
+        END DO
+      END DO
+    END SELECT
   END SUBROUTINE projecting_the_gcm_lonlat_coordinates_to_xy
 
 
@@ -1780,42 +1817,63 @@ CONTAINS
                                                         lon_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points)
     ! This routine projects the IM coordinates on the requested plane S' which coincides with the GCM grid,
     ! with an inverse oblique stereographic or an inverse oblique lambert equal area projection.
-    USE oblimap_configuration_module, ONLY: dp, C
+    USE oblimap_configuration_module, ONLY: dp, C, PAR
     USE oblimap_projection_module, ONLY: inverse_oblique_sg_projection, inverse_oblique_sg_projection_snyder, inverse_oblique_sg_projection_ellipsoid_snyder, &
       inverse_oblique_laea_projection_snyder, inverse_oblique_laea_projection_ellipsoid_snyder, inverse_rotation_projection
     IMPLICIT NONE
 
     ! Input variables:
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(IN)  :: x_coordinates_of_im_grid_points  ! The x-coordinates of the IM points in S'
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(IN)  :: y_coordinates_of_im_grid_points  ! The y-coordinates of the IM points in S'
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: x_coordinates_of_im_grid_points  ! The x-coordinates of the IM points in S'
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: y_coordinates_of_im_grid_points  ! The y-coordinates of the IM points in S'
 
     ! Output variables:
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(OUT) :: lon_coordinates_of_im_grid_points
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(OUT) :: lat_coordinates_of_im_grid_points
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: lon_coordinates_of_im_grid_points
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: lat_coordinates_of_im_grid_points
 
     ! Local variables:
     INTEGER                                     :: m, n
 
     ! Inverse projection of the IM (x,y)-coordinates to the GCM-(longitude,latitude) coordinates:
-    DO m = 1, C%NX
-    DO n = 1, C%NY
-      ! Output: lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n)
-      SELECT CASE(C%choice_projection_method)
-      CASE('oblique_stereographic_projection')
-       CALL inverse_oblique_sg_projection(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
-      CASE('oblique_stereographic_projection_snyder')
-       CALL inverse_oblique_sg_projection_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
-      CASE('oblique_stereographic_projection_ellipsoid_snyder')
-       CALL inverse_oblique_sg_projection_ellipsoid_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
-      CASE('oblique_lambert_equal-area_projection_snyder')
-       CALL inverse_oblique_laea_projection_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
-      CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
-       CALL inverse_oblique_laea_projection_ellipsoid_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
-      CASE('rotation_projection')
-       CALL inverse_rotation_projection(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
-      END SELECT
-    END DO
-    END DO
+    ! TODO profile original loop
+    ! Output: lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n)
+    SELECT CASE(C%choice_projection_method)
+    CASE('oblique_stereographic_projection')
+      DO n = PAR%ny0, PAR%ny1
+        DO m = PAR%nx0, PAR%nx1
+          CALL inverse_oblique_sg_projection(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
+        END DO
+      END DO
+    CASE('oblique_stereographic_projection_snyder')
+      DO n = PAR%ny0, PAR%ny1
+        DO m = PAR%nx0, PAR%nx1
+          CALL inverse_oblique_sg_projection_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
+        END DO
+      END DO
+    CASE('oblique_stereographic_projection_ellipsoid_snyder')
+      DO n = PAR%ny0, PAR%ny1
+        DO m = PAR%nx0, PAR%nx1
+          CALL inverse_oblique_sg_projection_ellipsoid_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
+        END DO
+      END DO
+    CASE('oblique_lambert_equal-area_projection_snyder')
+      DO n = PAR%ny0, PAR%ny1
+        DO m = PAR%nx0, PAR%nx1
+          CALL inverse_oblique_laea_projection_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
+        END DO
+      END DO
+    CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
+      DO n = PAR%ny0, PAR%ny1
+        DO m = PAR%nx0, PAR%nx1
+          CALL inverse_oblique_laea_projection_ellipsoid_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
+        END DO
+      END DO
+    CASE('rotation_projection')
+      DO n = PAR%ny0, PAR%ny1
+        DO m = PAR%nx0, PAR%nx1
+          CALL inverse_rotation_projection(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
+        END DO
+      END DO
+    END SELECT
   END SUBROUTINE projecting_the_im_xy_coordinates_to_lonlat
 
 
@@ -1823,17 +1881,19 @@ CONTAINS
   SUBROUTINE shifting_center_im_grid(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points)
     ! A shift is usually not necessary and not recommended in an oblique case, but can be very handy in a testing phase, or
     ! in case of a non optimal projection such as a polar projection of a non-polar region (i.e. a non-centered polar projection).
-    USE oblimap_configuration_module, ONLY: dp, C
+    USE oblimap_configuration_module, ONLY: dp, C, PAR
     USE oblimap_projection_module, ONLY: oblique_sg_projection, oblique_laea_projection_snyder, oblique_sg_projection_ellipsoid_snyder, oblique_laea_projection_ellipsoid_snyder
+    use mpi_f08
     IMPLICIT NONE
 
     ! In/Output variables:
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(INOUT) :: x_coordinates_of_im_grid_points
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(INOUT) :: y_coordinates_of_im_grid_points
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: x_coordinates_of_im_grid_points
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: y_coordinates_of_im_grid_points
 
     ! Local variables:
     REAL(dp)                                      :: shift_x_coordinate
     REAL(dp)                                      :: shift_y_coordinate
+    integer                                       :: m, n
 
     ! Output: shift_x_coordinate, shift_y_coordinate
     SELECT CASE(C%choice_projection_method)
@@ -1852,15 +1912,21 @@ CONTAINS
     CASE DEFAULT
      WRITE(UNIT=*, FMT='(/3A )') C%OBLIMAP_ERROR, ' shifting_center_im_grid(): in the config file: ', TRIM(C%config_filename)
      WRITE(UNIT=*, FMT='( 2A/)') '                Invalid value for:  choice_projection_method_config = ', TRIM(C%choice_projection_method)
-     STOP
+     call MPI_Abort(MPI_COMM_WORLD, -1)
     END SELECT
 
     ! There are three ways to apply a shift:
     !  1. Specifying an alternative lon-lat im center (angles in degrees)
     !  2. Specifying a shift in the IM coordinates (shift in meter)
     !  3. A combination of these two ways
-    x_coordinates_of_im_grid_points = x_coordinates_of_im_grid_points + shift_x_coordinate + C%shift_x_coordinate_im_grid
-    y_coordinates_of_im_grid_points = y_coordinates_of_im_grid_points + shift_y_coordinate + C%shift_y_coordinate_im_grid
+     DO n = PAR%ny0, PAR%ny1
+       DO m = PAR%nx0, PAR%nx1
+         !x_coordinates_of_im_grid_points = x_coordinates_of_im_grid_points + shift_x_coordinate + C%shift_x_coordinate_im_grid
+         !y_coordinates_of_im_grid_points = y_coordinates_of_im_grid_points + shift_y_coordinate + C%shift_y_coordinate_im_grid
+         x_coordinates_of_im_grid_points(m,n) = x_coordinates_of_im_grid_points(m,n) + shift_x_coordinate + C%shift_x_coordinate_im_grid
+         y_coordinates_of_im_grid_points(m,n) = y_coordinates_of_im_grid_points(m,n) + shift_y_coordinate + C%shift_y_coordinate_im_grid
+       END DO
+     END DO
   END SUBROUTINE shifting_center_im_grid
 
 
@@ -1873,19 +1939,19 @@ CONTAINS
     ! With the mapping from the IM to the GCM (the inverse oblique stereographic projection
     ! followed by the interpolation) it is necessary to know which GCM points are affected
     ! by the mapping, the rest of the GCM points keep their initial value.
-    USE oblimap_configuration_module, ONLY: dp, C
+    USE oblimap_configuration_module, ONLY: dp, C, PAR
     USE oblimap_projection_module, ONLY: oblique_sg_projection, oblique_sg_projection_ellipsoid_snyder, &
       oblique_laea_projection_snyder, oblique_laea_projection_ellipsoid_snyder, rotation_projection
     IMPLICIT NONE
 
     ! Input variables:
-    REAL(dp), DIMENSION(C%NX,  C%NY  ), INTENT(IN)  :: x_coordinates_of_im_grid_points  ! The x-coordinates of the IM points in S'
-    REAL(dp), DIMENSION(C%NX,  C%NY  ), INTENT(IN)  :: y_coordinates_of_im_grid_points  ! The y-coordinates of the IM points in S'
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(IN)  :: lon_gcm
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(IN)  :: lat_gcm
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: x_coordinates_of_im_grid_points  ! The x-coordinates of the IM points in S'
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: y_coordinates_of_im_grid_points  ! The y-coordinates of the IM points in S'
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: lon_gcm
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: lat_gcm
 
     ! Output variables:
-    INTEGER,  DIMENSION(C%NLON,C%NLAT), INTENT(OUT) :: mapping_participation_mask
+    INTEGER,  DIMENSION(:,:), INTENT(INOUT) :: mapping_participation_mask
 
     ! Local variables:
     INTEGER                                         :: i, j
@@ -1893,26 +1959,51 @@ CONTAINS
     REAL(dp)                                        :: y_gcm
 
     mapping_participation_mask = 0
-    DO i = 1, C%NLON
-    DO j = 1, C%NLAT
-      ! Output: x_gcm, y_gcm
-      SELECT CASE(C%choice_projection_method)
-      CASE('oblique_stereographic_projection','oblique_stereographic_projection_snyder')
-       CALL oblique_sg_projection(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
-      CASE('oblique_stereographic_projection_ellipsoid_snyder')
-       CALL oblique_sg_projection_ellipsoid_snyder(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
-      CASE('oblique_lambert_equal-area_projection_snyder')
-       CALL oblique_laea_projection_snyder(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
-      CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
-       CALL oblique_laea_projection_ellipsoid_snyder(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
-      CASE('rotation_projection')
-       CALL rotation_projection(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
-      END SELECT
+    ! TODO profile original loop
+    ! Output: x_gcm, y_gcm
+    SELECT CASE(C%choice_projection_method)
+    CASE('oblique_stereographic_projection','oblique_stereographic_projection_snyder')
+    DO j = PAR%nlat0, PAR%nlat1
+      DO i = PAR%nlon0, PAR%nlon1
+        CALL oblique_sg_projection(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
+        IF(x_gcm > x_coordinates_of_im_grid_points(1,1) .AND. x_gcm < x_coordinates_of_im_grid_points(C%NX,1) .AND. &
+           y_gcm > y_coordinates_of_im_grid_points(1,1) .AND. y_gcm < y_coordinates_of_im_grid_points(1,C%NY)        ) mapping_participation_mask(i,j) = 1
+      END DO
+    END DO
+    CASE('oblique_stereographic_projection_ellipsoid_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_sg_projection_ellipsoid_snyder(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
+          IF(x_gcm > x_coordinates_of_im_grid_points(1,1) .AND. x_gcm < x_coordinates_of_im_grid_points(C%NX,1) .AND. &
+             y_gcm > y_coordinates_of_im_grid_points(1,1) .AND. y_gcm < y_coordinates_of_im_grid_points(1,C%NY)        ) mapping_participation_mask(i,j) = 1
+        END DO
+      END DO
+    CASE('oblique_lambert_equal-area_projection_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_laea_projection_snyder(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
+          IF(x_gcm > x_coordinates_of_im_grid_points(1,1) .AND. x_gcm < x_coordinates_of_im_grid_points(C%NX,1) .AND. &
+             y_gcm > y_coordinates_of_im_grid_points(1,1) .AND. y_gcm < y_coordinates_of_im_grid_points(1,C%NY)        ) mapping_participation_mask(i,j) = 1
+        END DO
+      END DO
+    CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL oblique_laea_projection_ellipsoid_snyder(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
+          IF(x_gcm > x_coordinates_of_im_grid_points(1,1) .AND. x_gcm < x_coordinates_of_im_grid_points(C%NX,1) .AND. &
+             y_gcm > y_coordinates_of_im_grid_points(1,1) .AND. y_gcm < y_coordinates_of_im_grid_points(1,C%NY)        ) mapping_participation_mask(i,j) = 1
+        END DO
+      END DO
+    CASE('rotation_projection')
+      DO j = PAR%nlat0, PAR%nlat1
+        DO i = PAR%nlon0, PAR%nlon1
+          CALL rotation_projection(lon_gcm(i,j), lat_gcm(i,j), x_gcm, y_gcm)
+          IF(x_gcm > x_coordinates_of_im_grid_points(1,1) .AND. x_gcm < x_coordinates_of_im_grid_points(C%NX,1) .AND. &
+             y_gcm > y_coordinates_of_im_grid_points(1,1) .AND. y_gcm < y_coordinates_of_im_grid_points(1,C%NY)        ) mapping_participation_mask(i,j) = 1
+        END DO
+      END DO
+    END SELECT
 
-      IF(x_gcm > x_coordinates_of_im_grid_points(1,1) .AND. x_gcm < x_coordinates_of_im_grid_points(C%NX,1) .AND. &
-         y_gcm > y_coordinates_of_im_grid_points(1,1) .AND. y_gcm < y_coordinates_of_im_grid_points(1,C%NY)        ) mapping_participation_mask(i,j) = 1
-    END DO
-    END DO
   END SUBROUTINE make_mapping_participation_mask
 
 
@@ -2078,7 +2169,7 @@ CONTAINS
     !
     ! The output variable 'distance' given in meters is:
     !  the distance between the two given points measured over the WGS84 ellipsoid
-    ! or 
+    ! or
     !  the length of the geodesic on the WGS84 ellipsoid between the two given points
     !
     USE oblimap_configuration_module, ONLY: dp, C
@@ -2245,12 +2336,12 @@ CONTAINS
     ! minimal shifted point lies very very close to C, and such points are projected almost
     ! at an infinity large distance in the plane of projection, and will thus never be
     ! selected.
-    USE oblimap_configuration_module, ONLY: dp, C
+    USE oblimap_configuration_module, ONLY: dp, C, PAR
     IMPLICIT NONE
 
     ! In/Output variables:
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(INOUT) :: lon_gcm   ! The longitude coordinates (degrees) of the GCM grid points
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(INOUT) :: lat_gcm   ! The latitude  coordinates (degrees) of the GCM grid points
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: lon_gcm   ! The longitude coordinates (degrees) of the GCM grid points
+    REAL(dp), DIMENSION(:,:), INTENT(INOUT) :: lat_gcm   ! The latitude  coordinates (degrees) of the GCM grid points
 
     ! Local variables:
     REAL(dp)                                          :: lambda_C
@@ -2270,8 +2361,9 @@ CONTAINS
     lambda_C = lambda_C * C%radians_to_degrees
 
     ! Checking if any points coincide with C, and shifting these coordinates if that is the case:
-    DO i = 1, C%NLON
-    DO j = 1, C%NLAT
+    ! TODO profile original loop
+    DO j = PAR%nlat0, PAR%nlat1
+    DO i = PAR%nlon0, PAR%nlon1
       IF(lat_gcm(i,j) == phi_C) THEN
        ! For the north and south pole any lambda is allowed because the longitude coordinate at the poles is often poorly defined:
        IF(lon_gcm(i,j) == lambda_C .OR. phi_C == 90._dp .OR. phi_C == -90._dp) THEN
@@ -2305,8 +2397,8 @@ CONTAINS
 
     ! Input variables:
     CHARACTER(LEN=*)                  , INTENT(IN)           :: check_direction                                     ! This string distinguishes in the map direction
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(IN)           :: lon_gcm                                             ! The longitude coordinates (degrees) of the GCM grid points
-    REAL(dp), DIMENSION(C%NLON,C%NLAT), INTENT(IN)           :: lat_gcm                                             ! The latitude  coordinates (degrees) of the GCM grid points
+    REAL(dp), DIMENSION(:,:), INTENT(IN)           :: lon_gcm                                             ! The longitude coordinates (degrees) of the GCM grid points
+    REAL(dp), DIMENSION(:,:), INTENT(IN)           :: lat_gcm                                             ! The latitude  coordinates (degrees) of the GCM grid points
 
     ! Output variables:
     TYPE(oblimap_scan_parameter_type) , INTENT(OUT)          :: advised_scan_parameter
@@ -2331,8 +2423,9 @@ CONTAINS
     CASE('rotation_projection')
      estimated_distance = MIN(ABS(lon_gcm(2,1) - lon_gcm(1,1)), ABS(lat_gcm(1,2) - lat_gcm(1,1)))
     CASE DEFAULT
-     DO i = MAX(1, (C%NLON / 2) - 3), MIN(C%NLON - 1, (C%NLON / 2) + 2)
+     ! TODO profile original loop
      DO j = MAX(1, (C%NLAT / 2) - 3), MIN(C%NLAT - 1, (C%NLAT / 2) + 2)
+     DO i = MAX(1, (C%NLON / 2) - 3), MIN(C%NLON - 1, (C%NLON / 2) + 2)
        p = p + 1
        estimated_distance = estimated_distance + distance_over_earth_surface(lon_gcm(i,j), lat_gcm(i,j), lon_gcm(i+1,j), lat_gcm(i+1,j))
      END DO
@@ -2341,8 +2434,9 @@ CONTAINS
 
      IF(C%oblimap_message_level > 0) THEN
       ! Searching the minimum, maximum and average GCM grid resolution:
-      DO i = 2, C%NLON-1
+      ! TODO profile original loop
       DO j = 2, C%NLAT-1
+      DO i = 2, C%NLON-1
         grid_distance_in_lon_direction = distance_over_earth_surface(lon_gcm(i,j), lat_gcm(i,j), lon_gcm(i+1,j  ), lat_gcm(i+1,j  ))
         grid_distance_in_lat_direction = distance_over_earth_surface(lon_gcm(i,j), lat_gcm(i,j), lon_gcm(i  ,j+1), lat_gcm(i  ,j+1))
         IF(grid_distance_in_lon_direction == 0._dp) THEN
@@ -2511,9 +2605,9 @@ CONTAINS
      IF((C%level_of_automatic_oblimap_scanning >= 4)                                       ) C%akm                             = (1.0_dp + COS(C%alpha_stereographic)) * C%am
      IF(C%oblimap_message_level > 1) THEN
       WRITE(UNIT=*, FMT='(A       )') ' The following scan parameters are estimated by OBLIMAP in this run:'
-      IF((C%level_of_automatic_oblimap_scanning >= 1)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   data_set_is_cyclic_in_longitude_config = ', C%data_set_is_cyclic_in_longitude 
-      IF((C%level_of_automatic_oblimap_scanning >= 2)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   choice_quadrant_method_config = '         , C%choice_quadrant_method          
-      IF((C%level_of_automatic_oblimap_scanning >= 3) .AND. (.NOT. C%choice_quadrant_method)) WRITE(UNIT=*, FMT='( A, E24.16   )') '   R_search_interpolation_config = '         , C%R_search_interpolation          
+      IF((C%level_of_automatic_oblimap_scanning >= 1)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   data_set_is_cyclic_in_longitude_config = ', C%data_set_is_cyclic_in_longitude
+      IF((C%level_of_automatic_oblimap_scanning >= 2)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   choice_quadrant_method_config = '         , C%choice_quadrant_method
+      IF((C%level_of_automatic_oblimap_scanning >= 3) .AND. (.NOT. C%choice_quadrant_method)) WRITE(UNIT=*, FMT='( A, E24.16   )') '   R_search_interpolation_config = '         , C%R_search_interpolation
       IF((C%level_of_automatic_oblimap_scanning >= 4)                                       ) WRITE(UNIT=*, FMT='( A, F8.3  , A)') '   alpha_stereographic_config = '            , C%alpha_stereographic * C%radians_to_degrees, ' degrees'
       WRITE(UNIT=*, FMT='( A       )') ''
      END IF
