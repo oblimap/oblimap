@@ -48,7 +48,8 @@
 PROGRAM oblimap_par_im_to_gcm_program
   USE oblimap_configuration_module, ONLY: C, PAR, initialize_config_variables, oblimap_licence
   USE oblimap_im_to_gcm_mapping_module, ONLY: oblimap_im_to_gcm_mapping
-  USE MPI
+  use mpi_f08
+  use mpi_helpers_mod
   IMPLICIT NONE
 
   INTEGER :: ierror
@@ -56,31 +57,35 @@ PROGRAM oblimap_par_im_to_gcm_program
   ! Output: ierror
   CALL MPI_Init(ierror)
 
-  CALL MPI_COMM_RANK(MPI_COMM_WORLD, PAR%processor_id_process_dependent, ierror)
-  CALL MPI_COMM_SIZE(MPI_COMM_WORLD, PAR%number_of_processors, ierror)
+  CALL MPI_COMM_RANK(MPI_COMM_WORLD, PAR%rank, ierror)
+  CALL MPI_COMM_SIZE(MPI_COMM_WORLD, PAR%nprocs, ierror)
+
+  call MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED, PAR%rank_shared, MPI_INFO_NULL, PAR%shared_comm)
+  call MPI_COMM_RANK(PAR%shared_comm, PAR%rank_shared, ierror)
+  call MPI_COMM_SIZE(PAR%shared_comm, PAR%nshared_procs, ierror)
 
   ! Read the configuration file and initialization of the struckt C%:
   CALL initialize_config_variables()
-  IF(PAR%number_of_processors > C%NLON) THEN
+
+  ! FIXME with 2D decomposition
+  IF(PAR%nprocs > C%NX) THEN
    CALL MPI_Finalize(ierror)
-   IF(PAR%processor_id_process_dependent == 0) WRITE(UNIT=*, FMT='(/2A, I4, A, I4/)') C%OBLIMAP_ERROR, ' You are using ', PAR%number_of_processors, ' processors, which is too much for the current implementated domain decomposition. Lower that number to at least: ', C%NLON
+   IF(PAR%rank == 0) WRITE(UNIT=*, FMT='(/2A, I4, A, I4/)') C%OBLIMAP_ERROR, ' You are using ', PAR%nprocs, ' processors, which is too much for the current implementated domain decomposition. Lower that number to at least: ', C%NLON
    STOP
   END IF
 
-  IF(MOD(C%NLON, PAR%number_of_processors) == 0) THEN
-   PAR%max_nr_of_lines_per_partition_block = (C%NLON / PAR%number_of_processors)
-  ELSE
-   PAR%max_nr_of_lines_per_partition_block = (C%NLON / PAR%number_of_processors) + 1
-  END IF
-  PAR%psi_process_dependent = PAR%processor_id_process_dependent * PAR%max_nr_of_lines_per_partition_block + 1
+  ! 1D decomposition
+  PAR%ny0 = 1
+  PAR%ny1 = C%NLAT
 
-  IF(PAR%processor_id_process_dependent == 0) THEN
+  call decompose(C%NLON, PAR%nshared_procs, PAR%rank_shared, PAR%nlon0, PAR%nlon1)
+
+  IF(PAR%rank == 0) THEN
    ! Output: -
    CALL oblimap_licence('oblimap_gcm_to_im_program')
 
-   WRITE(UNIT=*,FMT='(4(A, I4)/)') '  OBLIMAP-PAR runs with: number_of_processors  = ', PAR%number_of_processors , ', NLON = ', C%NLON, ', max_nr_of_lines_per_partition_block = ', PAR%max_nr_of_lines_per_partition_block, ', load unbalance = ', PAR%number_of_processors * PAR%max_nr_of_lines_per_partition_block - C%NLON
+   WRITE(UNIT=*,FMT='(4(A, I4)/)') '  OBLIMAP-PAR runs with: number_of_processors  = ', PAR%nprocs , ', NLON = ', C%NLON, ', max_nr_of_lines_per_partition_block = ', PAR%nlon1-PAR%nlon0, ', load unbalance = ', PAR%nprocs * (PAR%nlon1-PAR%nlon0) - C%nlon
   END IF
- !WRITE(UNIT=*,FMT='(2(A, I4))') ' process id = ', PAR%processor_id_process_dependent, ' partition starting index = ', PAR%psi_process_dependent
 
   ! Calling the oblimap_im_to_gcm_mapping :
   CALL oblimap_im_to_gcm_mapping()
