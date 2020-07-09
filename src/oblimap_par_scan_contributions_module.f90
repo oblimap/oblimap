@@ -511,10 +511,10 @@ CONTAINS
     IMPLICIT NONE
 
     ! Input variables:
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
+    REAL(dp),      DIMENSION(:,:), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
     TYPE(oblimap_scan_parameter_type)        , INTENT(IN) :: advised_scan_parameter            ! The struct containing the crucial scan parameters.
 
     ! Local variables:

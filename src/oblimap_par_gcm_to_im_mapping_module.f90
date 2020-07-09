@@ -99,9 +99,9 @@ CONTAINS
     real(DP), dimension(:,:), pointer :: x_coordinates_of_im_grid_points, x_coordinates_of_im_grid_points_ ! global shared pointer and local one
     real(DP), dimension(:,:), pointer :: y_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points_
 
-    LOGICAL,  DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: mask_of_invalid_contributions    ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values) of the GCM grid points
-    REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: gcm_field
-    REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers) :: im_field
+    LOGICAL,  DIMENSION(:,:,:,:), allocatable :: mask_of_invalid_contributions    ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values) of the GCM grid points
+    REAL(dp), DIMENSION(:,:,:,:), allocatable :: gcm_field
+    REAL(dp), DIMENSION(:,:,:,:), allocatable :: im_field
     REAL(dp)                                                                                 :: time                             ! The time value for the considered record
     INTEGER                                                                                  :: field_counter                    ! The counter in the loop over the field numbers
     INTEGER                                                                                  :: record_counter                   ! The counter over the time records
@@ -193,6 +193,10 @@ CONTAINS
     ! Output: im_netcdf_file
     CALL create_netcdf_for_im_grid(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, gcm_netcdf_file, im_netcdf_file)
 
+    allocate(mask_of_invalid_contributions(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
+    allocate(gcm_field(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
+    allocate( im_field(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers))
+
     DO record_counter = 0, C%gcm_record_range(2) - C%gcm_record_range(1)
      ! Output: gcm_field, time
      CALL oblimap_read_netcdf_fields(gcm_netcdf_file, C%gcm_record_range(1) + record_counter, gcm_field, time)
@@ -252,6 +256,9 @@ CONTAINS
 
     ! Output: -
     CALL oblimap_deallocate_ddo(oblimap_ddo)
+    deallocate(mask_of_invalid_contributions)
+    deallocate(gcm_field)
+    deallocate( im_field)
 
   END SUBROUTINE oblimap_gcm_to_im_mapping
 

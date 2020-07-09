@@ -1792,7 +1792,7 @@ CONTAINS
     !
     ! The output variable 'distance' given in meters is:
     !  the distance between the two given points measured over the WGS84 ellipsoid
-    ! or 
+    ! or
     !  the length of the geodesic on the WGS84 ellipsoid between the two given points
     !
     USE oblimap_configuration_module, ONLY: dp, C
@@ -1838,7 +1838,7 @@ CONTAINS
     f     = C%ellipsoid_flattening                                       ! Flattening of the ellipsoid, f = 1 - (1 - e**2)**0.5 in Snyder (1987) at p. 13, f = (a-b)/a = 1 / 298.257223563, WGS84 value for f = 0.0033528106647474805
     b     = C%ellipsoid_semi_minor_axis                                  ! The semi-minor axis or the polar radius of the ellipsoid (in case of the Earth), b in Snyder (1987) at p. 160; WGS84 value for b = 6356752.314245179 meter
     L     = (point_2_lon - point_1_lon) * C%degrees_to_radians           ! Difference in longitude on an auxiliary sphere, positive east
-    U1    = ATAN((1._dp - f) * TAN(point_1_lat * C%degrees_to_radians))  ! Reduced latitude, defined by tan(U) = tan(1-f) * tan(phi) 
+    U1    = ATAN((1._dp - f) * TAN(point_1_lat * C%degrees_to_radians))  ! Reduced latitude, defined by tan(U) = tan(1-f) * tan(phi)
     U2    = ATAN((1._dp - f) * TAN(point_2_lat * C%degrees_to_radians))  !  with phi the geodetic latitude, positive north of the equator
     sin_U1 = SIN(U1)
     cos_U1 = COS(U1)
@@ -2225,9 +2225,9 @@ CONTAINS
      IF((C%level_of_automatic_oblimap_scanning >= 4)                                       ) C%akm                             = (1.0_dp + COS(C%alpha_stereographic)) * C%am
      IF(C%oblimap_message_level > 1) THEN
       WRITE(UNIT=*, FMT='(A       )') ' The following scan parameters are estimated by OBLIMAP in this run:'
-      IF((C%level_of_automatic_oblimap_scanning >= 1)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   data_set_is_cyclic_in_longitude_config = ', C%data_set_is_cyclic_in_longitude 
-      IF((C%level_of_automatic_oblimap_scanning >= 2)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   choice_quadrant_method_config = '         , C%choice_quadrant_method          
-      IF((C%level_of_automatic_oblimap_scanning >= 3) .AND. (.NOT. C%choice_quadrant_method)) WRITE(UNIT=*, FMT='( A, E24.16   )') '   R_search_interpolation_config = '         , C%R_search_interpolation          
+      IF((C%level_of_automatic_oblimap_scanning >= 1)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   data_set_is_cyclic_in_longitude_config = ', C%data_set_is_cyclic_in_longitude
+      IF((C%level_of_automatic_oblimap_scanning >= 2)                                       ) WRITE(UNIT=*, FMT='( A, L        )') '   choice_quadrant_method_config = '         , C%choice_quadrant_method
+      IF((C%level_of_automatic_oblimap_scanning >= 3) .AND. (.NOT. C%choice_quadrant_method)) WRITE(UNIT=*, FMT='( A, E24.16   )') '   R_search_interpolation_config = '         , C%R_search_interpolation
       IF((C%level_of_automatic_oblimap_scanning >= 4)                                       ) WRITE(UNIT=*, FMT='( A, F8.3  , A)') '   alpha_stereographic_config = '            , C%alpha_stereographic * C%radians_to_degrees, ' degrees'
       WRITE(UNIT=*, FMT='( A       )') ''
      END IF
