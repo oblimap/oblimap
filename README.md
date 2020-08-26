@@ -1,5 +1,3 @@
-<link rel="shortcut icon" type="image/png" href="documentation/figures/oblimap-user-guide-figure-1.png">
-
 # oblimap
 OBLIMAP: a fast coupler for coupling ice sheet models with climate models
 
