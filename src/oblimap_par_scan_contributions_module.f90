@@ -446,7 +446,7 @@ CONTAINS
     cumulated_processor_time = wall_clock_time_end - wall_clock_time_start
 
     ! In/Output: cumulated_processor_time_reduced
-    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
+    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
     IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
@@ -892,7 +892,7 @@ CONTAINS
     cumulated_processor_time = wall_clock_time_end - wall_clock_time_start
 
     ! In/Output: cumulated_processor_time_reduced
-    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
+    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
     IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
@@ -1229,7 +1229,7 @@ CONTAINS
     cumulated_processor_time = wall_clock_time_end - wall_clock_time_start
 
     ! In/Output: cumulated_processor_time_reduced
-    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
+    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
     IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
@@ -1554,7 +1554,7 @@ CONTAINS
     cumulated_processor_time = wall_clock_time_end - wall_clock_time_start
 
     ! In/Output: cumulated_processor_time_reduced
-    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
+    CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
     IF(PAR%rank_shared == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
