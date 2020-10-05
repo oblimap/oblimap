@@ -985,7 +985,11 @@ CONTAINS
 
     IF(index_of_last_slash /= 0) THEN
      ! Abort in case the directry in the path of the filename does not exist:
+     #if __INTEL_COMPILER
      INQUIRE(EXIST = file_exists, DIRECTORY = full_string(1:index_of_last_slash))
+     #else
+     INQUIRE(EXIST = file_exists, FILE = full_string(1:index_of_last_slash))
+     #endif
      IF(.NOT. file_exists) THEN
       WRITE(UNIT=*,FMT='(/6A/)') C%ERROR,' The directory "', TRIM(full_string(1:index_of_last_slash)), '" for the file "', TRIM(full_string), '" does not exists.'
       call abort()
