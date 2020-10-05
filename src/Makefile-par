@@ -65,10 +65,10 @@ MOD_PATH = module-files
 
 # Pattern rules for creating object files from *.f90 (fortran 90) source files
 $(OBJ_PATH)/%.o : %.f90
-	$(F90) $(F90FLAGS) -c -o $@ $<
+	$(F90) -DUSE_MPI $(F90FLAGS) -c -o $@ $<
 
 $(OBJ_PATH)/%.o : %.F90
-	$(F90) $(F90FLAGS) -c -o $@ $<
+	$(F90) -DUSE_MPI $(F90FLAGS) -c -o $@ $<
 
 # This rule is used to build an executable from the object files:
 % :

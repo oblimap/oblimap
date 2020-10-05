@@ -46,7 +46,9 @@
 !
 
 MODULE oblimap_configuration_module
+#ifdef USE_MPI
       use mpi_f08
+#endif
       IMPLICIT NONE
 
       ! PRECISION
@@ -297,6 +299,7 @@ MODULE oblimap_configuration_module
       TYPE(constants_type), SAVE :: C
 
 
+#ifdef USE_MPI
       ! This TYPE contains variables which are related to the parallel OBLIMAP implementation using MPI.
       TYPE parallel_type
         integer :: nx0, nx1
@@ -310,6 +313,7 @@ MODULE oblimap_configuration_module
 
       ! PAR is the 'struct' containing the parallel OBLIMAP implementation using MPI.
       TYPE(parallel_type), SAVE :: PAR
+#endif
 
 
       TYPE oblimap_scan_parameter_type
@@ -985,11 +989,11 @@ CONTAINS
 
     IF(index_of_last_slash /= 0) THEN
      ! Abort in case the directry in the path of the filename does not exist:
-     #if __INTEL_COMPILER
+#ifdef __INTEL_COMPILER
      INQUIRE(EXIST = file_exists, DIRECTORY = full_string(1:index_of_last_slash))
-     #else
+#else
      INQUIRE(EXIST = file_exists, FILE = full_string(1:index_of_last_slash))
-     #endif
+#endif
      IF(.NOT. file_exists) THEN
       WRITE(UNIT=*,FMT='(/6A/)') C%ERROR,' The directory "', TRIM(full_string(1:index_of_last_slash)), '" for the file "', TRIM(full_string), '" does not exists.'
       call abort()
