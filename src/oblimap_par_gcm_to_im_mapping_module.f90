@@ -110,26 +110,35 @@ CONTAINS
     TYPE(oblimap_netcdf_file_type)                                                           :: gcm_netcdf_file
     TYPE(oblimap_ddo_type)                                                                   :: oblimap_ddo                      ! The DDO containing all the scanned contributions
     TYPE(oblimap_scan_parameter_type)                                                        :: advised_scan_parameter
+    type(MPI_Win) :: lon_gcm_win, lat_gcm_win
+    type(MPI_Win) :: x_coordinates_of_im_grid_points_win
+    type(MPI_Win) :: y_coordinates_of_im_grid_points_win
 
     ! TODO allocate lon_gcm
     ! TODO allocate lat_gcm
     call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
                      , C%NLAT, PAR%nlat0, PAR%nlat1 &
-                     , lon_gcm, lon_gcm_, PAR%shared_comm)
+                     , lon_gcm, lon_gcm_ &
+                     , lon_gcm_win &
+                     , PAR%shared_comm)
 
     call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
                      , C%NLAT, PAR%nlat0, PAR%nlat1 &
-                     , lat_gcm, lat_gcm_, PAR%shared_comm)
+                     , lat_gcm, lat_gcm_ &
+                     , lat_gcm_win &
+                     , PAR%shared_comm)
 
     call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
                      , C%NY, PAR%ny0, PAR%ny1 &
                      , x_coordinates_of_im_grid_points &
-                     , x_coordinates_of_im_grid_points_, PAR%shared_comm)
+                     , x_coordinates_of_im_grid_points_ &
+                     , x_coordinates_of_im_grid_points_win, PAR%shared_comm)
 
     call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
                      , C%NY, PAR%ny0, PAR%ny1 &
                      , y_coordinates_of_im_grid_points &
-                     , y_coordinates_of_im_grid_points_, PAR%shared_comm)
+                     , y_coordinates_of_im_grid_points_ &
+                     , y_coordinates_of_im_grid_points_win, PAR%shared_comm)
 
     ! Check whether the directory in the path of C%im_created_filename exists:
     CALL check_directory_existence(C%im_created_filename)
@@ -182,6 +191,7 @@ CONTAINS
 
     ! TODO implement shared up to this point
     !call MPI_Abort(MPI_COMM_WORLD, 0)
+    call MPI_Barrier(MPI_COMM_WORLD)
     call MPI_Finalize()
     stop
 
@@ -259,6 +269,11 @@ CONTAINS
     deallocate(mask_of_invalid_contributions)
     deallocate(gcm_field)
     deallocate( im_field)
+
+    call MPI_Win_free(lon_gcm_win)
+    call MPI_Win_free(lat_gcm_win)
+    call MPI_Win_free(x_coordinates_of_im_grid_points_win)
+    call MPI_Win_free(y_coordinates_of_im_grid_points_win)
 
   END SUBROUTINE oblimap_gcm_to_im_mapping
 

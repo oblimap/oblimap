@@ -127,6 +127,8 @@ CONTAINS
     REAL(dp)                                              :: cumulated_processor_time
     REAL(dp)                                              :: cumulated_processor_time_reduced
     LOGICAL                                               :: exist
+    type(MPI_Win) :: x_coordinates_of_gcm_grid_points_win
+    type(MPI_Win) :: y_coordinates_of_gcm_grid_points_win
 
 
     IF(lat_gcm(1,1) < lat_gcm(1,C%NLAT)) THEN
@@ -138,12 +140,14 @@ CONTAINS
     call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
                      , C%NLAT, PAR%nlat0, PAR%nlat1 &
                      , x_coordinates_of_gcm_grid_points &
-                     , x_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+                     , x_coordinates_of_gcm_grid_points_ &
+                     , x_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
 
     call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
                      , C%NLAT, PAR%nlat0, PAR%nlat1 &
                      , y_coordinates_of_gcm_grid_points &
-                     , y_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+                     , y_coordinates_of_gcm_grid_points_ &
+                     , y_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
 
     ! Projection of the GCM coordinates to the IM coordinates with the oblique stereographic projection:
     ! Output: x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points
@@ -492,6 +496,9 @@ CONTAINS
      END IF
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
+
+    call MPI_Win_free(x_coordinates_of_gcm_grid_points_win)
+    call MPI_Win_free(y_coordinates_of_gcm_grid_points_win)
   END SUBROUTINE scan_with_quadrant_method_gcm_to_im
 
 
@@ -573,6 +580,8 @@ CONTAINS
     REAL(dp)                                              :: cumulated_processor_time
     REAL(dp)                                              :: cumulated_processor_time_reduced
     LOGICAL                                               :: exist
+    type(MPI_Win) :: x_coordinates_of_gcm_grid_points_win
+    type(MPI_Win) :: y_coordinates_of_gcm_grid_points_win
 
     IF(lat_gcm(1,1) < lat_gcm(1,C%NLAT)) THEN
      latitude_parallel_to_grid_numbers = .TRUE.
@@ -583,12 +592,14 @@ CONTAINS
     call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
                      , C%NLAT, PAR%nlat0, PAR%nlat1 &
                      , x_coordinates_of_gcm_grid_points &
-                     , x_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+                     , x_coordinates_of_gcm_grid_points_ &
+                     , x_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
 
     call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
                      , C%NLAT, PAR%nlat0, PAR%nlat1 &
                      , y_coordinates_of_gcm_grid_points &
-                     , y_coordinates_of_gcm_grid_points_, PAR%shared_comm)
+                     , y_coordinates_of_gcm_grid_points_ &
+                     , y_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
 
     ! The devision by 1000 is to prevent the failure of CEILING with large numbers:
     max_size = CEILING(MAX(4._dp * C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)), &
@@ -945,6 +956,8 @@ CONTAINS
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
 
+    call MPI_Win_free(x_coordinates_of_gcm_grid_points_win)
+    call MPI_Win_free(y_coordinates_of_gcm_grid_points_win)
    !IF(maximum_contributions > max_size) THEN
    ! WRITE(UNIT=*, FMT='(/3A       )') C%OBLIMAP_ERROR, ' scan_with_radius_method_gcm_to_im(): in the config file: ', TRIM(C%config_filename)
    ! WRITE(UNIT=*, FMT='(  A, F5.1/)') '                The oblimap_allocate_factor_config should be increased to ', 1.1_dp * maximum_contributions / REAL(max_size)

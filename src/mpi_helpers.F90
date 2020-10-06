@@ -34,15 +34,15 @@ contains
 
   subroutine alloc_shared( nx, x0, x1 &
                          , ny, y0, y1 &
-                         , a_sm, a_, shared_comm)
+                         , a_sm, a_, a_win, shared_comm)
     use iso_c_binding
     implicit none
     integer, intent(in) :: nx, x0, x1
     integer, intent(in) :: ny, y0, y1
     real(dp), dimension(:,:), pointer, intent(out) :: a_sm, a_
+    type(MPI_Win), intent(out) :: a_win
     type(MPI_Comm), intent(in) :: shared_comm
 
-    type(MPI_Win) :: a_win
     type(MPI_Info) :: info
     type(C_PTR) :: a_sm_c
 
