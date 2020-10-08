@@ -153,6 +153,8 @@ CONTAINS
      END IF
     END IF
 
+    ! TODO implement shared up to this point in oblimap_par_gcm_to_im_mapping_module.f90
+    stop
 
     ! Reading the contributions of the scanned projection data into the Dynamic Data Object (DDO):
     ! Output: oblimap_ddo
