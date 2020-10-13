@@ -7,6 +7,10 @@ module mpi_helpers_mod
 
   public :: decompose
   public :: alloc_shared
+  interface alloc_shared
+    module procedure alloc_shared_2d_dp
+  end interface alloc_shared
+
 contains
   !! https://arxiv.org/pdf/1804.09536.pdf
   !! balanced block decomposition
@@ -32,9 +36,9 @@ contains
      n0 = n0 + 1 !from n0:n1
   end subroutine decompose
 
-  subroutine alloc_shared( nx, x0, x1 &
-                         , ny, y0, y1 &
-                         , a_sm, a_, a_win, shared_comm)
+  subroutine alloc_shared_2d_dp( nx, x0, x1 &
+                               , ny, y0, y1 &
+                               , a_sm, a_, a_win, shared_comm)
     use iso_c_binding
     implicit none
     integer, intent(in) :: nx, x0, x1
@@ -97,5 +101,5 @@ contains
    !! endif
 
 
-  end subroutine alloc_shared
+  end subroutine alloc_shared_2d_dp
 end module mpi_helpers_mod
