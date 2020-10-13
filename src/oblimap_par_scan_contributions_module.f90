@@ -997,21 +997,22 @@ CONTAINS
     ! mapped fast and simultaneously on to the GCM grid.
     USE oblimap_configuration_module, ONLY: dp, C, PAR, oblimap_scan_parameter_type
     USE oblimap_mapping_module, ONLY: triplet
-    USE MPI
+    use mpi_f08
+    use mpi_helpers_mod
     IMPLICIT NONE
 
     ! Input variables:
-    INTEGER,       DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: mapping_participation_mask        ! A mask for points which participate (mask = 1) in the mapping, so which fall within the mapped area.
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
+    INTEGER,       DIMENSION(:, :), INTENT(IN) :: mapping_participation_mask        ! A mask for points which participate (mask = 1) in the mapping, so which fall within the mapped area.
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
     TYPE(oblimap_scan_parameter_type)        , INTENT(IN) :: advised_scan_parameter            ! The struct containing the crucial scan parameters.
 
     ! Local variables:
     REAL(dp)                                              :: minimum_im_grid_distance          ! Just MIN(C%dx, C%dy)
-    REAL(dp),      DIMENSION(  C%NX  ,C%NY  )             :: lon_coordinates_of_im_grid_points
-    REAL(dp),      DIMENSION(  C%NX  ,C%NY  )             :: lat_coordinates_of_im_grid_points
+    REAL(dp),      DIMENSION(:, :), pointer               :: lon_coordinates_of_im_grid_points, lon_coordinates_of_im_grid_points_
+    REAL(dp),      DIMENSION(:, :), pointer               :: lat_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points_
     INTEGER                                               :: i, j
     INTEGER                                               :: m, n
     REAL(dp)                                              :: i_message = 0._dp
@@ -1025,10 +1026,10 @@ CONTAINS
     INTEGER                                               :: count_contributions
     INTEGER                                               :: quadrant                          ! The quadrant I, II, III or IV relative to a GCM grid point
     TYPE(triplet)                                         :: projected_im                      ! Projected GCM point on S'
-    TYPE(triplet), DIMENSION(4,C%NLON,C%NLAT)             :: contribution                      ! Nearest projected IM point in quadrant (DIM=I,II,III or IV) in S, relative to the GCM grid point
+    TYPE(triplet), DIMENSION(:,:,:), ALLOCATABLE          :: contribution                      ! Projected IM points on S within C%R_search_interpolation, relative to the GCM grid point
     TYPE(triplet)                                         :: no_contribution                   ! In case there are no contributions, the nearest contribution elements are set to some specific values: the distance to a huge number, and the indices are set to -1
     TYPE(triplet)                                         :: pivot_contribution                ! The selected pivot contribution, this pivot determines the position of the scan block
-    TYPE(triplet), DIMENSION(  C%NLON,C%NLAT)             :: nearest_contribution              ! Keep the nearest projected IM contribution for each GCM grid point
+    TYPE(triplet), DIMENSION(:,:), allocatable            :: nearest_contribution              ! Keep the nearest projected IM contribution for each GCM grid point
     LOGICAL                                               :: do_full_scan                      ! Do a full scan off all projected departing grid points for this destination grid point
     INTEGER                                               :: m_start                           ! The starting m indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
     INTEGER                                               :: m_end                             ! The ending   m indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
@@ -1038,7 +1039,7 @@ CONTAINS
     INTEGER                                               :: m_end_previous_iteration          ! The m_end   of the previous iteration in the WHILE-loop
     INTEGER                                               :: n_start_previous_iteration        ! The n_start of the previous iteration in the WHILE-loop
     INTEGER                                               :: n_end_previous_iteration          ! The n_end   of the previous iteration in the WHILE-loop
-    LOGICAL,       DIMENSION(  C%NX  ,C%NY  )             :: mask
+    LOGICAL,       DIMENSION(:, :), allocatable           :: mask                              ! The mask which is used in the dynamic scanning, setting the interior of the already scanned block to FALSE
 
     !!
     ! The additional variables which are required for the parallel MPI implementation:
@@ -1056,8 +1057,27 @@ CONTAINS
     REAL(dp)                                              :: cumulated_processor_time
     REAL(dp)                                              :: cumulated_processor_time_reduced
     LOGICAL                                               :: exist
+    type(MPI_Win) :: lon_coordinates_of_im_grid_points_win
+    type(MPI_Win) :: lat_coordinates_of_im_grid_points_win
 
     minimum_im_grid_distance = MIN(C%dx, C%dy)
+
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , lon_coordinates_of_im_grid_points &
+                     , lon_coordinates_of_im_grid_points_ &
+                     , lon_coordinates_of_im_grid_points_win, PAR%shared_comm)
+
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , lat_coordinates_of_im_grid_points &
+                     , lat_coordinates_of_im_grid_points_ &
+                     , lat_coordinates_of_im_grid_points_win, PAR%shared_comm)
+
+    allocate(nearest_contribution(PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1))
+    allocate(mask(1:C%NX, 1:C%NY))
+    !ALLOCATE(contribution(4,C%NLON,C%NLAT), STAT=status)
+    ALLOCATE(contribution(4,PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1))
 
     ! Projection of the IM coordinates to the GCM coordinates with the inverse oblique stereographic projection:
     ! Output: lon_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points
@@ -1303,6 +1323,11 @@ CONTAINS
      END IF
      CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
     END DO
+
+    call MPI_Win_free(lon_coordinates_of_im_grid_points_win)
+    call MPI_Win_free(lat_coordinates_of_im_grid_points_win)
+
+    deallocate(mask, nearest_contribution, contribution)
   END SUBROUTINE scan_with_quadrant_method_im_to_gcm
 
 
@@ -1317,23 +1342,24 @@ CONTAINS
     ! mapped fast and simultaneously on to the GCM grid.
     USE oblimap_configuration_module, ONLY: dp, C, PAR, oblimap_scan_parameter_type
     USE oblimap_mapping_module, ONLY: triplet
-    USE MPI
+    use mpi_f08
+    use mpi_helpers_mod
     IMPLICIT NONE
 
     ! Input variables:
-    INTEGER,       DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: mapping_participation_mask        ! A mask for points which participate (mask = 1) in the mapping, so which fall within the mapped area.
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  ), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
-    REAL(dp),      DIMENSION(  C%NLON,C%NLAT), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
+    INTEGER,       DIMENSION(:, :), INTENT(IN) :: mapping_participation_mask        ! A mask for points which participate (mask = 1) in the mapping, so which fall within the mapped area.
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: x_coordinates_of_im_grid_points   ! The x-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: y_coordinates_of_im_grid_points   ! The y-coordinates of the IM points in S'
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: lon_gcm                           ! The longitude coordinates (degrees) of the GCM grid points
+    REAL(dp),      DIMENSION(:, :), INTENT(IN) :: lat_gcm                           ! The latitude  coordinates (degrees) of the GCM grid points
     TYPE(oblimap_scan_parameter_type)        , INTENT(IN) :: advised_scan_parameter            ! The struct containing the crucial scan parameters.
 
     ! Local variables:
     INTEGER                                               :: max_size
     INTEGER                                               :: status
     REAL(dp)                                              :: minimum_im_grid_distance          ! Just MIN(C%dx, C%dy)
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  )             :: lon_coordinates_of_im_grid_points
-    REAL(dp),      DIMENSION(  C%NX,  C%NY  )             :: lat_coordinates_of_im_grid_points
+    REAL(dp),      DIMENSION(:, :), pointer               :: lon_coordinates_of_im_grid_points, lon_coordinates_of_im_grid_points_
+    REAL(dp),      DIMENSION(:, :), pointer               :: lat_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points_
     INTEGER                                               :: i, j
     INTEGER                                               :: m, n
     REAL(dp)                                              :: i_message = 0._dp
@@ -1350,7 +1376,7 @@ CONTAINS
     TYPE(triplet), DIMENSION(:,:,:), ALLOCATABLE          :: contribution                      ! Projected IM points on S within C%R_search_interpolation, relative to the GCM grid point
     TYPE(triplet)                                         :: no_contribution                   ! In case there are no contributions, the nearest contribution elements are set to some specific values: the distance to a huge number, and the indices are set to -1
     TYPE(triplet)                                         :: pivot_contribution                ! The selected pivot contribution, this pivot determines the position of the scan block
-    TYPE(triplet), DIMENSION(  C%NLON,C%NLAT)             :: nearest_contribution              ! Keep the nearest projected IM contribution for each GCM grid point
+    TYPE(triplet), DIMENSION(:,:), allocatable            :: nearest_contribution              ! Keep the nearest projected IM contribution for each GCM grid point
     LOGICAL                                               :: do_full_scan                      ! Do a full scan off all projected departing grid points for this destination grid point
     INTEGER                                               :: m_start                           ! The starting m indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
     INTEGER                                               :: m_end                             ! The ending   m indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
@@ -1360,7 +1386,7 @@ CONTAINS
     INTEGER                                               :: m_end_previous_iteration          ! The m_end   of the previous iteration in the WHILE-loop
     INTEGER                                               :: n_start_previous_iteration        ! The n_start of the previous iteration in the WHILE-loop
     INTEGER                                               :: n_end_previous_iteration          ! The n_end   of the previous iteration in the WHILE-loop
-    LOGICAL,       DIMENSION(  C%NX  ,C%NY  )             :: mask                              ! The mask which is used in the dynamic scanning, setting the interior of the already scanned block to FALSE
+    LOGICAL,       DIMENSION(:, :), allocatable           :: mask                              ! The mask which is used in the dynamic scanning, setting the interior of the already scanned block to FALSE
 
     !!
     ! The additional variables which are required for the parallel MPI implementation:
@@ -1379,10 +1405,29 @@ CONTAINS
     REAL(dp)                                              :: cumulated_processor_time
     REAL(dp)                                              :: cumulated_processor_time_reduced
     LOGICAL                                               :: exist
+    type(MPI_Win) :: lon_coordinates_of_im_grid_points_win
+    type(MPI_Win) :: lat_coordinates_of_im_grid_points_win
+
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , lon_coordinates_of_im_grid_points &
+                     , lon_coordinates_of_im_grid_points_ &
+                     , lon_coordinates_of_im_grid_points_win, PAR%shared_comm)
+
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , lat_coordinates_of_im_grid_points &
+                     , lat_coordinates_of_im_grid_points_ &
+                     , lat_coordinates_of_im_grid_points_win, PAR%shared_comm)
 
     max_size = CEILING(MAX(4._dp * C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)), &
                                    C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)))  * C%oblimap_allocate_factor)
-    ALLOCATE(contribution(max_size,C%NLON,C%NLAT), STAT=status)
+    allocate(nearest_contribution(PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1))
+
+    allocate(mask(1:C%NX, 1:C%NY))
+
+    !ALLOCATE(contribution(max_size,C%NLON,C%NLAT), STAT=status)
+    ALLOCATE(contribution(max_size,PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1), STAT=status)
     IF(status /= 0) THEN
      WRITE(UNIT=*, FMT='(/2A, /2(A, I8), A, F16.3, A/)') &
       C%OBLIMAP_ERROR, ' message from: scan_with_radius_method_im_to_gcm():  The allocation of the "contribution struct" exceeds your system allocation capacity.', &
@@ -1641,6 +1686,11 @@ CONTAINS
    ! WRITE(UNIT=*, FMT='(  A, F5.1/)') '                The oblimap_allocate_factor_config should be increased to ', 1.1_dp * maximum_contributions / REAL(max_size)
    ! STOP
    !END IF
+
+    call MPI_Win_free(lon_coordinates_of_im_grid_points_win)
+    call MPI_Win_free(lat_coordinates_of_im_grid_points_win)
+
+    deallocate(mask, nearest_contribution)
   END SUBROUTINE scan_with_radius_method_im_to_gcm
 
 
