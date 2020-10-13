@@ -91,7 +91,7 @@ PROGRAM oblimap_gcm_to_im_program
    ! Output: -
    CALL oblimap_licence('oblimap_gcm_to_im_program')
 
-   WRITE(UNIT=*,FMT='(4(A, I4)/)') '  OBLIMAP-PAR runs with: number_of_processors  = ', PAR%nprocs , ', NX = ', C%NX, ', max_nr_of_lines_per_partition_block = ', PAR%nx1-PAR%Nx0, ', load unbalance = ', PAR%nprocs * (PAR%nx1-PAR%Nx0) - C%NX
+   WRITE(UNIT=*,FMT='(4(A, I4)/)') '  OBLIMAP-PAR(shared) runs with: number_of_processors  = ', PAR%nprocs , ', NX = ', C%NX, ', max_nr_of_lines_per_partition_block = ', PAR%nx1-PAR%Nx0, ', load unbalance = ', PAR%nprocs * (PAR%nx1-PAR%Nx0) - C%NX
   END IF
 
   ! Calling the oblimap_gcm_to_im_mapping :

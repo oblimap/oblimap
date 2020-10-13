@@ -95,10 +95,12 @@ CONTAINS
     INTEGER                                               :: quadrant                          ! The quadrant I, II, III or IV relative to an IM grid point
     INTEGER                                               :: loop
     TYPE(triplet)                                         :: projected_gcm                     ! Projected GCM point on S'
-    TYPE(triplet), DIMENSION(4,C%NX  ,C%NY  )             :: contribution                      ! Nearest projected GCM point in quadrant (DIM=I,II,III or IV) in S', relative to the IM grid point
+    !!TYPE(triplet), DIMENSION(4,C%NX  ,C%NY  )             :: contribution                      ! Nearest projected GCM point in quadrant (DIM=I,II,III or IV) in S', relative to the IM grid point
+    TYPE(triplet), DIMENSION(:, :, :), allocatable            :: contribution                       ! Nearest projected GCM point in quadrant (DIM=I,II,III or IV) in S', relative to the IM grid point
     TYPE(triplet)                                         :: no_contribution                   ! In case there are no contributions, the nearest contribution elements are set to some specific values: the distance to a huge number, and the indices are set to -1
     TYPE(triplet)                                         :: pivot_contribution                ! The selected pivot contribution, this pivot determines the position of the scan block
-    TYPE(triplet), DIMENSION(  C%NX  ,C%NY  )             :: nearest_contribution              ! Keep the nearest projected GCM contribution for each IM grid point
+    !!TYPE(triplet), DIMENSION(  C%NX  ,C%NY  )             :: nearest_contribution              ! Keep the nearest projected GCM contribution for each IM grid point
+    TYPE(triplet), DIMENSION(:, :), allocatable           :: nearest_contribution              ! Keep the nearest projected GCM contribution for each IM grid point
     LOGICAL                                               :: do_full_scan                      ! Do a full scan off all projected departing grid points for this destination grid point
     INTEGER                                               :: i_start                           ! The starting i indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
     INTEGER                                               :: i_end                             ! The ending   i indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
@@ -108,7 +110,8 @@ CONTAINS
     INTEGER                                               :: i_end_previous_iteration          ! The i_end   of the previous iteration in the WHILE-loop
     INTEGER                                               :: j_start_previous_iteration        ! The j_start of the previous iteration in the WHILE-loop
     INTEGER                                               :: j_end_previous_iteration          ! The j_end   of the previous iteration in the WHILE-loop
-    LOGICAL,       DIMENSION(  C%NLON,C%NLAT)             :: mask
+    !!LOGICAL,       DIMENSION(  C%NLON,C%NLAT)             :: mask
+    LOGICAL,       DIMENSION(:, :), allocatable           :: mask
     REAL(dp)                                              :: local_gcm_grid_distance           ! The distance between two local GCM grid neighbour points
 
     !!
@@ -130,7 +133,6 @@ CONTAINS
     type(MPI_Win) :: x_coordinates_of_gcm_grid_points_win
     type(MPI_Win) :: y_coordinates_of_gcm_grid_points_win
 
-
     IF(lat_gcm(1,1) < lat_gcm(1,C%NLAT)) THEN
      latitude_parallel_to_grid_numbers = .TRUE.
     ELSE
@@ -148,6 +150,11 @@ CONTAINS
                      , y_coordinates_of_gcm_grid_points &
                      , y_coordinates_of_gcm_grid_points_ &
                      , y_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
+
+    allocate(nearest_contribution(PAR%nx0:PAR%ny1, PAR%ny0:PAR%ny1))
+    allocate(contribution(4, PAR%nx0:PAR%ny1, PAR%ny0:PAR%ny1))
+    !allocate(mask(PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1))
+    allocate(mask(1:C%NLON, 1:C%NLAT))
 
     ! Projection of the GCM coordinates to the IM coordinates with the oblique stereographic projection:
     ! Output: x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points
@@ -499,6 +506,7 @@ CONTAINS
 
     call MPI_Win_free(x_coordinates_of_gcm_grid_points_win)
     call MPI_Win_free(y_coordinates_of_gcm_grid_points_win)
+    deallocate(contribution, mask, nearest_contribution)
   END SUBROUTINE scan_with_quadrant_method_gcm_to_im
 
 
@@ -550,7 +558,7 @@ CONTAINS
     TYPE(triplet), DIMENSION(:,:,:), ALLOCATABLE          :: contribution                      ! Nearest projected GCM point in quadrant (DIM=I,II,III or IV) in S', relative to the IM grid point
     TYPE(triplet)                                         :: no_contribution                   ! In case there are no contributions, the nearest contribution elements are set to some specific values: the distance to a huge number, and the indices are set to -1
     TYPE(triplet)                                         :: pivot_contribution                ! The selected pivot contribution, this pivot determines the position of the scan block
-    TYPE(triplet), DIMENSION(  C%NX  ,C%NY  )             :: nearest_contribution              ! Keep the nearest projected GCM contribution for each IM grid point
+    TYPE(triplet), DIMENSION(:,:), allocatable             :: nearest_contribution              ! Keep the nearest projected GCM contribution for each IM grid point
     LOGICAL                                               :: do_full_scan                      ! Do a full scan off all projected departing grid points for this destination grid point
     INTEGER                                               :: i_start                           ! The starting i indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
     INTEGER                                               :: i_end                             ! The ending   i indices to walk through the local block to find the nearest contributions, avoiding a search through the whole domain for each point
@@ -560,7 +568,7 @@ CONTAINS
     INTEGER                                               :: i_end_previous_iteration          ! The i_end   of the previous iteration in the DO WHILE-loop
     INTEGER                                               :: j_start_previous_iteration        ! The j_start of the previous iteration in the DO WHILE-loop
     INTEGER                                               :: j_end_previous_iteration          ! The j_end   of the previous iteration in the DO WHILE-loop
-    LOGICAL,       DIMENSION(  C%NLON,C%NLAT)             :: mask
+    LOGICAL,       DIMENSION(:,:), allocatable             :: mask
     REAL(dp)                                              :: local_gcm_grid_distance           ! The distance between two local GCM grid neighbour points
 
     !!
@@ -604,7 +612,12 @@ CONTAINS
     ! The devision by 1000 is to prevent the failure of CEILING with large numbers:
     max_size = CEILING(MAX(4._dp * C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)), &
                                    C%pi * (C%R_search_interpolation / 1000._dp)**2 / ((C%dx / 1000._dp) * (C%dy / 1000._dp)))  * C%oblimap_allocate_factor)
-    ALLOCATE(contribution(max_size,C%NX,C%NY), STAT=status)
+    allocate(nearest_contribution(PAR%nx0:PAR%nx1, PAR%ny0:PAR%ny1))
+    !allocate(mask(PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1))
+    allocate(mask(1:C%NLON, 1:C%NLAT))
+
+    !ALLOCATE(contribution(max_size,C%NX,C%NY), STAT=status)
+    ALLOCATE(contribution(max_size,PAR%nx0:PAR%nx1, PAR%ny0:PAR%ny1), STAT=status)
     IF(status /= 0) THEN
      WRITE(UNIT=*, FMT='(/2A, /2(A, I8), A, F16.3, A/)') &
       C%OBLIMAP_ERROR, ' message from: scan_with_radius_method_gcm_to_im():  The allocation of the "contribution struct" exceeds your system allocation capacity.', &
@@ -958,6 +971,8 @@ CONTAINS
 
     call MPI_Win_free(x_coordinates_of_gcm_grid_points_win)
     call MPI_Win_free(y_coordinates_of_gcm_grid_points_win)
+
+    deallocate(mask, nearest_contribution)
    !IF(maximum_contributions > max_size) THEN
    ! WRITE(UNIT=*, FMT='(/3A       )') C%OBLIMAP_ERROR, ' scan_with_radius_method_gcm_to_im(): in the config file: ', TRIM(C%config_filename)
    ! WRITE(UNIT=*, FMT='(  A, F5.1/)') '                The oblimap_allocate_factor_config should be increased to ', 1.1_dp * maximum_contributions / REAL(max_size)
