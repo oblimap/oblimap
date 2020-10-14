@@ -8,6 +8,7 @@ module mpi_helpers_mod
   public :: decompose
   public :: alloc_shared
   interface alloc_shared
+    module procedure alloc_shared_1d_dp
     module procedure alloc_shared_1d_i
     module procedure alloc_shared_2d_dp
     module procedure alloc_shared_2d_i
@@ -37,6 +38,43 @@ contains
      n1 = n0 + n_
      n0 = n0 + 1 !from n0:n1
   end subroutine decompose
+
+  subroutine alloc_shared_1d_dp( nx, x0, x1 &
+                               , a_sm, a_, a_win, shared_comm)
+    use iso_c_binding
+    implicit none
+    integer, intent(in) :: nx, x0, x1
+    real(dp), dimension(:), pointer, intent(out) :: a_sm, a_
+    type(MPI_Win), intent(out) :: a_win
+    type(MPI_Comm), intent(in) :: shared_comm
+
+    type(MPI_Info) :: info
+    type(C_PTR) :: a_sm_c
+
+    integer :: rank_shared, rank
+    integer (kind=MPI_ADDRESS_KIND) :: lowerbound, real_extent, size_sm
+    integer :: sizeofreal
+    integer(KIND=MPI_ADDRESS_KIND) :: size_
+
+    call MPI_Comm_rank(shared_comm, rank_shared)
+
+    size_sm = 0
+    if(rank_shared == 0) size_sm = (nx)
+
+    call MPI_Type_get_extent(MPI_DOUBLE_PRECISION, lowerbound, real_extent)
+    sizeofreal = real_extent
+
+    size_ = size_sm*sizeofreal
+    info = MPI_INFO_NULL
+    call MPI_Win_allocate_shared(size_, sizeofreal, info, shared_comm, a_sm_c, a_win)
+    rank = 0
+    call MPI_Win_shared_query(a_win, rank, size_sm, sizeofreal, a_sm_c)
+    size_sm = size_sm/sizeofreal
+    call c_f_pointer(a_sm_c, a_sm, (/ nx /))
+
+    a_ => a_sm(x0:x1)
+
+  end subroutine alloc_shared_1d_dp
 
   subroutine alloc_shared_2d_dp( nx, x0, x1 &
                                , ny, y0, y1 &
