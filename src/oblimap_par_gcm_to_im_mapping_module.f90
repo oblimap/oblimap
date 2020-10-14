@@ -99,9 +99,9 @@ CONTAINS
     real(DP), dimension(:,:), pointer :: x_coordinates_of_im_grid_points, x_coordinates_of_im_grid_points_ ! global shared pointer and local one
     real(DP), dimension(:,:), pointer :: y_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points_
 
-    LOGICAL,  DIMENSION(:,:,:,:), allocatable :: mask_of_invalid_contributions    ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values) of the GCM grid points
-    REAL(dp), DIMENSION(:,:,:,:), allocatable :: gcm_field
-    REAL(dp), DIMENSION(:,:,:,:), allocatable :: im_field
+    LOGICAL,  DIMENSION(:,:,:,:), pointer :: mask_of_invalid_contributions, mask_of_invalid_contributions_    ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values) of the GCM grid points
+    REAL(dp), DIMENSION(:,:,:,:), pointer :: gcm_field, gcm_field_
+    REAL(dp), DIMENSION(:,:,:,:), pointer :: im_field, im_field_
     REAL(dp)                                                                                 :: time                             ! The time value for the considered record
     INTEGER                                                                                  :: field_counter                    ! The counter in the loop over the field numbers
     INTEGER                                                                                  :: record_counter                   ! The counter over the time records
@@ -113,6 +113,9 @@ CONTAINS
     type(MPI_Win) :: lon_gcm_win, lat_gcm_win
     type(MPI_Win) :: x_coordinates_of_im_grid_points_win
     type(MPI_Win) :: y_coordinates_of_im_grid_points_win
+    type(MPI_Win) :: mask_of_invalid_contributions_win
+    type(MPI_Win) :: gcm_field_win
+    type(MPI_Win) :: im_field_win
 
     ! TODO allocate lon_gcm
     ! TODO allocate lat_gcm
@@ -197,25 +200,42 @@ CONTAINS
     ! Output: im_netcdf_file
     CALL create_netcdf_for_im_grid(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, gcm_netcdf_file, im_netcdf_file)
 
-    CALL oblimap_close_netcdf_file(im_netcdf_file)
-    call MPI_Barrier(MPI_COMM_WORLD)
-    call MPI_Finalize()
-    stop
-
-    allocate(mask_of_invalid_contributions(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
-    allocate(gcm_field(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
-    allocate( im_field(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers))
+    !allocate(mask_of_invalid_contributions(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
+    !allocate(gcm_field(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
+    !allocate( im_field(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers))
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , mask_of_invalid_contributions, mask_of_invalid_contributions_ &
+                     , mask_of_invalid_contributions_win &
+                     , PAR%shared_comm)
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , gcm_field, gcm_field_ &
+                     , gcm_field_win &
+                     , PAR%shared_comm)
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , im_field, im_field_ &
+                     , im_field_win &
+                     , PAR%shared_comm)
 
     DO record_counter = 0, C%gcm_record_range(2) - C%gcm_record_range(1)
      ! Output: gcm_field, time
      CALL oblimap_read_netcdf_fields(gcm_netcdf_file, C%gcm_record_range(1) + record_counter, gcm_field, time)
+     CALL MPI_Barrier(PAR%shared_comm)
 
      ! Determine the mask_of_invalid_contributions based on the invalid values for the specified field:
      mask_of_invalid_contributions = .FALSE.
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
-       IF(C%masked_fields(field_counter)) WHERE(gcm_field(C%field_which_determines_invalid_value_mask(field_counter),:,:,layer_counter) == C%invalid_input_value(field_counter)) &
-        mask_of_invalid_contributions(field_counter,:,:,layer_counter) = .TRUE.
+       IF(C%masked_fields(field_counter)) WHERE(gcm_field_(:,:,layer_counter,C%field_which_determines_invalid_value_mask(field_counter)) == C%invalid_input_value(field_counter)) &
+        mask_of_invalid_contributions_(:,:,layer_counter, field_counter) = .TRUE.
      END DO
      END DO
 
@@ -228,10 +248,10 @@ CONTAINS
      ! Rescaling each field by multiplication with a gcm_to_im_factor and by adding a gcm_to_im_shift (in case the units differ):
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
-       WHERE(im_field(field_counter,:,:,layer_counter) /= C%invalid_input_value(field_counter))
-        im_field(field_counter,:,:,layer_counter) = C%field_factor(field_counter) * im_field(field_counter,:,:,layer_counter) + C%field_shift(field_counter)
+       WHERE(im_field_(:,:,layer_counter,field_counter) /= C%invalid_input_value(field_counter))
+        im_field_(:,:,layer_counter,field_counter) = C%field_factor(field_counter) * im_field_(:,:,layer_counter,field_counter) + C%field_shift(field_counter)
        ELSEWHERE
-        im_field(field_counter,:,:,layer_counter) = C%invalid_output_value(field_counter)
+        im_field_(:,:,layer_counter,field_counter) = C%invalid_output_value(field_counter)
        END WHERE
      END DO
      END DO
@@ -241,6 +261,7 @@ CONTAINS
 
      ! Finally the mapped fields im_field are written to an output file:
      ! Output: -
+     CALL MPI_Barrier(PAR%shared_comm)
      CALL oblimap_write_netcdf_fields(im_netcdf_file, 1 + record_counter, im_field, time)
     END DO
 
@@ -265,9 +286,12 @@ CONTAINS
 
     ! Output: -
     CALL oblimap_deallocate_ddo(oblimap_ddo)
-    deallocate(mask_of_invalid_contributions)
-    deallocate(gcm_field)
-    deallocate( im_field)
+    !deallocate(mask_of_invalid_contributions)
+    !deallocate(gcm_field)
+    !deallocate( im_field)
+    call MPI_Win_free(mask_of_invalid_contributions_win)
+    call MPI_Win_free(gcm_field_win)
+    call MPI_Win_free(im_field_win)
 
     call MPI_Win_free(lon_gcm_win)
     call MPI_Win_free(lat_gcm_win)

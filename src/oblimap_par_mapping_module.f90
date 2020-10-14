@@ -110,12 +110,12 @@ CONTAINS
     INTEGER,                                                                                                    INTENT(IN)            :: N_column_input
     INTEGER,                                                                                                    INTENT(IN)            :: N_row_mapped
     INTEGER,                                                                                                    INTENT(IN)            :: N_column_mapped
-    LOGICAL,  DIMENSION(C%number_of_mapped_fields, N_row_input,  N_column_input , C%number_of_vertical_layers), INTENT(IN)            :: mask_of_invalid_contributions  ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values)
-    REAL(dp), DIMENSION(C%number_of_mapped_fields, N_row_input,  N_column_input , C%number_of_vertical_layers), INTENT(IN)            :: input_field
+    LOGICAL,  DIMENSION(:,:,:,:), INTENT(IN)            :: mask_of_invalid_contributions  ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values)
+    REAL(dp), DIMENSION(:,:,:,:), INTENT(IN)            :: input_field
 
     ! Output variables:
-    REAL(dp), DIMENSION(C%number_of_mapped_fields, N_row_mapped, N_column_mapped, C%number_of_vertical_layers), INTENT(OUT)           :: mapped_field
-    INTEGER,  DIMENSION(                           N_row_mapped, N_column_mapped                             ), INTENT(OUT), OPTIONAL :: mapping_participation_mask
+    REAL(dp), DIMENSION(:,:,:,:), INTENT(OUT)           :: mapped_field
+    INTEGER,  DIMENSION(  :,:  ), INTENT(OUT), OPTIONAL :: mapping_participation_mask
 
     ! Local variables:
     INTEGER                                                                                                                           :: p                              ! Counter which counts over the affected/mapped/target points
@@ -136,7 +136,8 @@ CONTAINS
     ! then one layer. In case of more vertical layers this implementation does not give the best performance (however differences will be small).
     DO layer_counter = 1, C%number_of_vertical_layers
      ! See equation (2.17) and equation (2.19) in Reerink et al. (2010), both cases are treated with the same code:
-     DO p = 1, ddo%total_mapped_points
+     !DO p = 1, ddo%total_mapped_points
+     DO p = ddo%total_mapped_points0, ddo%total_mapped_points1
        nearest_contribution%row_index    = -1                ! Initialize at an inappropriate value
        nearest_contribution%column_index = -1                ! Initialize at an inappropriate value
        nearest_contribution%distance     = C%large_distance  ! Initialize at a large value
@@ -153,9 +154,9 @@ CONTAINS
 
          ! Contributions which have no invalid value mask will be taken into account:
          DO field_counter = 1, C%number_of_mapped_fields
-          IF(.NOT. mask_of_invalid_contributions(field_counter,ddo%row_index(p,q),ddo%column_index(p,q),layer_counter)) THEN
+          IF(.NOT. mask_of_invalid_contributions(ddo%row_index(p,q),ddo%column_index(p,q),layer_counter,field_counter)) THEN
            ! See numerator in equation (2.17) and equation (2.19) in Reerink et al. (2010):
-           numerator(field_counter)   = numerator(field_counter) + input_field(field_counter,ddo%row_index(p,q),ddo%column_index(p,q),layer_counter) / (ddo%distance(p,q)**C%shepard_exponent)
+           numerator(field_counter)   = numerator(field_counter) + input_field(ddo%row_index(p,q),ddo%column_index(p,q),layer_counter,field_counter) / (ddo%distance(p,q)**C%shepard_exponent)
            ! See denumerator in equation (2.17) and equation (2.19) in Reerink et al. (2010):
            denumerator(field_counter) = denumerator(field_counter) + (1._dp / (ddo%distance(p,q)**C%shepard_exponent))
           END IF
@@ -164,24 +165,24 @@ CONTAINS
 
        IF(ddo%total_contributions(p) == 0) THEN
         ! If there are no contributions found set the field value to an invalid value (this should actually not occur, because such points are never written to the SID file):
-        mapped_field(:,ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter) = C%invalid_input_value(:)
+        mapped_field(ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter,:) = C%invalid_input_value(:)
        ELSE IF(C%nearest_point_assignment) THEN
         ! Nearest point assignment instead of interpolation of various neighbour points:
         DO field_counter = 1, C%number_of_mapped_fields
-         IF(mask_of_invalid_contributions(field_counter,nearest_contribution%row_index,nearest_contribution%column_index,layer_counter)) THEN
-          mapped_field(field_counter,ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter) = C%invalid_input_value(field_counter)
+         IF(mask_of_invalid_contributions(nearest_contribution%row_index,nearest_contribution%column_index,layer_counter,field_counter)) THEN
+          mapped_field(ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter,field_counter) = C%invalid_input_value(field_counter)
          ELSE
-          mapped_field(field_counter,ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter) = input_field(field_counter,nearest_contribution%row_index,nearest_contribution%column_index,layer_counter)
+          mapped_field(ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter,field_counter) = input_field(nearest_contribution%row_index,nearest_contribution%column_index,layer_counter,field_counter)
          END IF
         END DO
        ELSE
         DO field_counter = 1, C%number_of_mapped_fields
-         IF((C%invalid_value_mask_criterion(field_counter) == 1) .AND. mask_of_invalid_contributions(field_counter,nearest_contribution%row_index,nearest_contribution%column_index,layer_counter)) THEN
+         IF((C%invalid_value_mask_criterion(field_counter) == 1) .AND. mask_of_invalid_contributions(nearest_contribution%row_index,nearest_contribution%column_index,layer_counter,field_counter)) THEN
           ! NOTE: In case the nearest contributing point is invalid but all other contributing points are valid, then the mapped point will be taken invalid. And vice versa.
-          mapped_field(field_counter,ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter) = C%invalid_input_value(field_counter)
+          mapped_field(ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter,field_counter) = C%invalid_input_value(field_counter)
          ELSE
-          mapped_field(field_counter,ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter) = numerator(field_counter) / denumerator(field_counter)
-         !mapped_field(field_counter,ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter) = numerator(field_counter,layer_counter) / denumerator(field_counter,layer_counter)    !!! In case the layer loop is brought inside
+          mapped_field(ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter,field_counter) = numerator(field_counter) / denumerator(field_counter)
+         !mapped_field(ddo%row_index_destination(p),ddo%column_index_destination(p),layer_counter,field_counter) = numerator(field_counter,layer_counter) / denumerator(field_counter,layer_counter)    !!! In case the layer loop is brought inside
          END IF
         END DO
        END IF
@@ -224,12 +225,6 @@ CONTAINS
     INTEGER                             :: p                     ! Counter which counts over the affected/mapped/target points
     INTEGER                             :: q                     ! Counter over the contributing points at each target point
     INTEGER               , PARAMETER   :: unit_number = 118
-    integer  :: row_index_destination_
-    integer  :: column_index_destination_
-    integer  :: total_contributions_
-    integer  :: row_index_
-    integer  :: column_index_
-    real(dp) :: distance_
 
     ! Check file existence:
     INQUIRE(EXIST = file_exists, FILE = sid_filename)
@@ -378,6 +373,7 @@ CONTAINS
    !WRITE(UNIT=*, FMT='(2(A, I12))') ' Number of mapped points is: ', ddo%total_mapped_points, ', maximum amount of contributions for one mapped point = ', ddo%maximum_contributions
 
     call decompose(ddo%total_mapped_points, PAR%nshared_procs, PAR%rank_shared, ddo%total_mapped_points0, ddo%total_mapped_points1)
+    WRITE(UNIT=*, FMT='(A, I12, A, I12, I12, A, I12))') ' Number of mapped points is: ', ddo%total_mapped_points, ':', ddo%total_mapped_points0, ddo%total_mapped_points1, ', maximum amount of contributions for one mapped point = ', ddo%maximum_contributions
     call alloc_shared( ddo%total_mapped_points &
                      , ddo%total_mapped_points0 &
                      , ddo%total_mapped_points1 &

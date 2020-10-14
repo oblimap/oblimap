@@ -81,6 +81,7 @@ CONTAINS
     ! This routine opens a netcdf file.
     USE oblimap_configuration_module, ONLY: dp, C
     USE netcdf, ONLY: nf90_open, nf90_nowrite, nf90_inquire, nf90_inq_varid, nf90_inquire_variable, nf90_get_var
+    use mpi_f08
     IMPLICIT NONE
 
     ! Input variables:
@@ -142,8 +143,26 @@ CONTAINS
     nc%LEN_DIM(2) = LEN_DIM_2
     nc%LEN_DIM(3) = C%number_of_vertical_layers                                                ! Number of vertical layers, i.e. number of grid points of the vertical coordinate
 
+    if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
+      nc%starts(1) = PAR%nx0
+      nc%starts(2) = PAR%ny0
+
+      nc%counts(1) = PAR%nx1-PAR%nx0+1
+      nc%counts(2) = PAR%ny1-PAR%ny0+1
+    else
+      nc%starts(1) = PAR%nlon0
+      nc%starts(2) = PAR%nlat0
+
+      nc%counts(1) = PAR%nlon1-PAR%nlon0+1
+      nc%counts(2) = PAR%nlat1-PAR%nlat0+1
+    endif
+    nc%starts(3) = 1
+    nc%counts(3) = 1
+
     ! Open the netcdf file:
-    CALL handle_error(nf90_open(nc%file_name, nf90_nowrite, nc%ncid),                                                       '. [ 1] From oblimap_open_netcdf_file(): The file '//TRIM(nc%file_name)//' is not found')
+    CALL handle_error(nf90_open(nc%file_name, nf90_nowrite, nc%ncid &
+                               , comm=MPI_COMM_WORLD%MPI_VAL, info=MPI_INFO_NULL%MPI_VAL &
+                               ),                                                                                           '. [ 1] From oblimap_open_netcdf_file(): The file '//TRIM(nc%file_name)//' is not found')
 
     CALL handle_error(nf90_inquire(ncid = nc%ncid, unlimitedDimID = unlimited_dimension_id),                                '. [ 2] From oblimap_open_netcdf_file(): it concerns the  file '//TRIM(nc%file_name))
     IF(unlimited_dimension_id == -1) THEN
@@ -670,6 +689,8 @@ CONTAINS
     ! Local variables:
     INTEGER                                                                                                   :: field_counter    ! The counter in the loop over the field numbers
     integer, dimension(4) :: starts, counts
+    real(dp), dimension(:,:,:), allocatable :: read_field
+    integer :: nx0, nx1, ny0, ny1, nz0, nz1
 
     ! In case time is in argument list, initialize in any case:
     IF(PRESENT(time)) time = 0.0_dp
@@ -682,11 +703,21 @@ CONTAINS
      END IF
     END IF
 
+    nx0=nc%starts(1)
+    nx1=nc%starts(1)+nc%counts(1)-1
+    ny0=nc%starts(2)
+    ny1=nc%starts(2)+nc%counts(2)-1
+    nz0=nc%starts(3)
+    nz1=nc%starts(3)+nc%counts(3)-1
+    allocate(read_field( nx0:nx1 &
+                       , ny0:ny1 &
+                       , nz0:nz1) )
+
     ! Read the field variables:
     DO field_counter = 1, nc%number_of_fields
       IF(nc%enable_ignore_option .AND. C%ignore_reading_pre_mapped_fields(field_counter)) THEN
        ! Ignore reading this pre mapped field.
-       fields(field_counter,:,:,:) = C%invalid_input_value(field_counter)
+       fields(nx0:nx1,ny0:ny1,nz0:nz1,field_counter) = C%invalid_input_value(field_counter)
       ELSE
 
        IF(nc%include_time_dimension) THEN
@@ -696,49 +727,57 @@ CONTAINS
          starts(4)   = record_number
          counts(1:3) = nc%counts(1:3)
          counts(4)   = 1
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=starts(1:4), count=counts(1:4)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), read_field, start=starts(1:4), count=counts(1:4)), &
           '. [2] From oblimap_read_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
+         fields(nx0:nx1,ny0:ny1,nz0:nz1,field_counter) = read_field(:,:,:)
         ELSE IF(nc%spatial_dimension_of_field(field_counter) == 1) THEN
          ! 1D var
          starts(1) = nc%starts(1)
          starts(2)   = record_number
          counts(1) = nc%counts(1)
          counts(2)   = 1
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=starts(1:2), count=counts(1:2)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), read_field, start=starts(1:2), count=counts(1:2)), &
           '. [3] From oblimap_read_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
+         fields(nx0:nx1,1,1,field_counter) = read_field(:,1,1)
         ELSE
          ! 2D var
          starts(1:2) = nc%starts(1:2)
          starts(3)   = record_number
          counts(1:2) = nc%counts(1:2)
          counts(3)   = 1
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=starts(1:3), count=counts(1:3)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), read_field, start=starts(1:3), count=counts(1:3)), &
           '. [4] From oblimap_read_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
+         fields(nx0:nx1,ny0:ny1,1,field_counter) = read_field(:,:,1)
         END IF
        ELSE
         IF(nc%spatial_dimension_of_field(field_counter) == 3) THEN
          ! 3D var
          starts(1:3) = nc%starts(1:3)
          counts(1:3) = nc%counts(1:3)
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=starts(1:3), count=counts(1:3)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), read_field, start=starts(1:3), count=counts(1:3)), &
           '. [5] From oblimap_read_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
+         fields(nx0:nx1,ny0:ny1,nz0:nz1,field_counter) = read_field(:,:,:)
         ELSE IF(nc%spatial_dimension_of_field(field_counter) == 1) THEN
          ! 1D var
          starts(1) = nc%starts(1)
          counts(1) = nc%counts(1)
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=starts(1:1), count=counts(1:1)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), read_field, start=starts(1:1), count=counts(1:1)), &
           '. [6] From oblimap_read_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
+         fields(nx0:nx1,1,1,field_counter) = read_field(:,1,1)
         ELSE
          ! 2D var
          starts(1:2) = nc%starts(1:2)
          counts(1:2) = nc%counts(1:2)
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=starts(1:2), count=counts(1:2)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), read_field, start=starts(1:2), count=counts(1:2)), &
           '. [7] From oblimap_read_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
+         fields(nx0:nx1,ny0:ny1,1,field_counter) = read_field(:,:,1)
         END IF
        END IF
 
       END IF
     END DO
+
+    deallocate(read_field)
   END SUBROUTINE oblimap_read_netcdf_fields
 
 
@@ -754,7 +793,7 @@ CONTAINS
     INTEGER                                               , INTENT(IN)            :: record_number    ! time record number
 
     ! Output variables:
-    REAL(dp), DIMENSION(nc%number_of_fields,nc%LEN_DIM(1)), INTENT(OUT)           :: fields
+    REAL(dp), DIMENSION(nc%LEN_DIM(1), nc%number_of_fields), INTENT(OUT)          :: fields
     REAL(dp)                                              , INTENT(OUT), OPTIONAL :: time
 
     ! Local variables:
@@ -775,14 +814,14 @@ CONTAINS
     DO field_counter = 1, nc%number_of_fields
       IF(nc%enable_ignore_option .AND. C%ignore_reading_pre_mapped_fields(field_counter)) THEN
        ! Ignore reading this pre mapped field.
-       fields(field_counter,:) = C%invalid_input_value(field_counter)
+       fields(:,field_counter) = C%invalid_input_value(field_counter)
       ELSE
 
        IF(nc%include_time_dimension) THEN
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:), start=(/1, record_number/)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(:,field_counter), start=(/1, record_number/)), &
           '. [2] From oblimap_read_netcdf_1D_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
        ELSE
-         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(field_counter,:), start=(/1               /)), &
+         CALL handle_error(nf90_get_var(nc%ncid, nc%id(field_counter), fields(:,field_counter), start=(/1               /)), &
           '. [3] From oblimap_read_netcdf_1D_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
        END IF
       END IF
@@ -807,6 +846,8 @@ CONTAINS
     INTEGER                                                                                                  :: field_counter   ! The counter in the loop over the field numbers
     REAL(dp)                                                                                                 :: written_time
     integer, dimension(4) :: starts, counts
+    real(dp), dimension(:,:,:), allocatable :: write_field
+    integer :: nx0, nx1, ny0, ny1, nz0, nz1
 
     IF(PRESENT(time)) THEN
      written_time = time
@@ -821,6 +862,17 @@ CONTAINS
       '. [1] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
     END IF
 
+    nx0=nc%starts(1)
+    nx1=nc%starts(1)+nc%counts(1)-1
+    ny0=nc%starts(2)
+    ny1=nc%starts(2)+nc%counts(2)-1
+    nz0=nc%starts(3)
+    nz1=nc%starts(3)+nc%counts(3)-1
+    allocate(write_field( nx0:nx1 &
+                        , ny0:ny1 &
+                        , nz0:nz1) )
+
+
     ! Put the other field variables:
     DO field_counter = 1, nc%number_of_fields
 
@@ -831,7 +883,8 @@ CONTAINS
        starts(4)   = record_number
        counts(1:3) = nc%counts(1:3)
        counts(4)   = 1
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=starts(1:4), count=counts(1:4)), &
+       write_field(nx0:nx1, ny0:ny1, nz0:nz1) = fields(:,:,:,field_counter)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,:), start=starts(1:4), count=counts(1:4)), &
         '. [2] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE IF(nc%spatial_dimension_of_field(field_counter) == 1) THEN
        ! 1D var
@@ -839,7 +892,8 @@ CONTAINS
        starts(2)   = record_number
        counts(1) = nc%counts(1)
        counts(2)   = 1
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=starts(1:2), count=counts(1:2)), &
+       write_field(nx0:nx1, 1, 1) = fields(:,1,1,field_counter)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,1,1), start=starts(1:2), count=counts(1:2)), &
         '. [3] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE
        ! 2D var
@@ -847,7 +901,8 @@ CONTAINS
        starts(3)   = record_number
        counts(1:2) = nc%counts(1:2)
        counts(3)   = 1
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=starts(1:3), count=counts(1:3)), &
+       write_field(nx0:nx1, ny0:ny1, 1) = fields(:,:,1,field_counter)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,1), start=starts(1:3), count=counts(1:3)), &
         '. [4] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       END IF
      ELSE
@@ -855,19 +910,22 @@ CONTAINS
        ! 3D var
        starts(1:3) = nc%starts(1:3)
        counts(1:3) = nc%counts(1:3)
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=starts(1:3), count=counts(1:3)), &
+       write_field(nx0:nx1, ny0:ny1, nz0:nz1) = fields(:,:,:,field_counter)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,:), start=starts(1:3), count=counts(1:3)), &
         '. [5] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE IF(nc%spatial_dimension_of_field(field_counter) == 1) THEN
        ! 1D var
        starts(1) = nc%starts(1)
        counts(1) = nc%counts(1)
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=starts(1:2), count=counts(1:2)), &
+       write_field(nx0:nx1, 1, 1) = fields(:,1,1,field_counter)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,1,1), start=starts(1:1), count=counts(1:1)), &
         '. [6] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE
        ! 2D var
        starts(1:2) = nc%starts(1:2)
        counts(1:2) = nc%counts(1:2)
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=starts(1:1), count=counts(1:1)), &
+       write_field(nx0:nx1, ny0:ny1, 1) = fields(:,:,1,field_counter)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,1), start=starts(1:2), count=counts(1:2)), &
         '. [7] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       END IF
      END IF
@@ -876,6 +934,8 @@ CONTAINS
 
     ! Synchronize the disk copy of a netcdf dataset: to minimize data loss in case of an abnormal termination:
     IF(C%synchronize_netcdf_writing) CALL handle_error(nf90_sync(nc%ncid), '. [8] From oblimap_write_netcdf_fields(): while synchronizing the file: '//TRIM(nc%file_name))
+
+    deallocate(write_field)
   END SUBROUTINE oblimap_write_netcdf_fields
 
 
@@ -913,10 +973,10 @@ CONTAINS
     DO field_counter = 1, nc%number_of_fields
 
      IF(nc%include_time_dimension) THEN
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:), start=(/1, record_number/)), &
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(:,field_counter), start=(/1, record_number/)), &
         '. [2] From oblimap_write_netcdf_1D_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
      ELSE
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:), start=(/1               /)), &
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(:,field_counter), start=(/1               /)), &
         '. [3] From oblimap_write_netcdf_1D_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
      END IF
     END DO
