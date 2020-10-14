@@ -441,29 +441,17 @@ CONTAINS
     END IF
 
     ! See equation (2.17) and equation (2.19) in Reerink et al. (2010), both cases are treated with the same code:
-    DO p = 1, ddo%total_mapped_points
-     !READ(UNIT=unit_number, FMT='(3I6)', ADVANCE='NO') ddo%row_index_destination(p), ddo%column_index_destination(p), ddo%total_contributions(p)
-     READ(UNIT=unit_number, FMT='(3I6)', ADVANCE='NO') row_index_destination_, column_index_destination_, total_contributions_
-     if(ddo%total_mapped_points0 <= p .and. &
-        p <= ddo%total_mapped_points1) then
-       ddo%row_index_destination_(p) = row_index_destination_
-       ddo%column_index_destination_(p) = column_index_destination_
-       ddo%total_contributions_(p) = total_contributions_
-     endif
+    if(PAR%rank_shared == 0) then
+      DO p = 1, ddo%total_mapped_points
+       READ(UNIT=unit_number, FMT='(3I6)', ADVANCE='NO') ddo%row_index_destination(p), ddo%column_index_destination(p), ddo%total_contributions(p)
 
-     DO q = 1, total_contributions_
-       !READ(UNIT=unit_number, FMT='(2I6,E23.15)', ADVANCE='NO') ddo%row_index(p,q), ddo%column_index(p,q), ddo%distance(p,q)
-       READ(UNIT=unit_number, FMT='(2I6,E23.15)', ADVANCE='NO') row_index_, column_index_, distance_
-       if(ddo%total_mapped_points0 <= p .and. &
-          p <= ddo%total_mapped_points1) then
-         ddo%row_index_(p,q) = row_index_
-         ddo%column_index_(p,q) = column_index_
-         ddo%distance_(p,q) = distance_
-       endif
-     END DO
+       DO q = 1, ddo%total_contributions(p)
+         READ(UNIT=unit_number, FMT='(2I6,E23.15)', ADVANCE='NO') ddo%row_index(p,q), ddo%column_index(p,q), ddo%distance(p,q)
+       END DO
 
-     READ(UNIT=unit_number, FMT='(A)') end_of_line
-    END DO
+       READ(UNIT=unit_number, FMT='(A)') end_of_line
+      END DO
+    end if
     call MPI_Barrier(PAR%shared_comm)
 
     ! Closing the SID file:
