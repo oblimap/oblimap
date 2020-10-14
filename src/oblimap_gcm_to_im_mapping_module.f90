@@ -153,9 +153,6 @@ CONTAINS
      END IF
     END IF
 
-    ! TODO implement shared up to this point in oblimap_par_gcm_to_im_mapping_module.f90
-    stop
-
     ! Reading the contributions of the scanned projection data into the Dynamic Data Object (DDO):
     ! Output: oblimap_ddo
     CALL oblimap_read_sid_file(C%sid_filename, oblimap_ddo)
@@ -163,6 +160,10 @@ CONTAINS
     ! The IM netcdf file is created, this file contains the IM fields which are mapped on the IM grid:
     ! Output: im_netcdf_file
     CALL create_netcdf_for_im_grid(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, gcm_netcdf_file, im_netcdf_file)
+
+    ! TODO implement shared up to this point in oblimap_par_gcm_to_im_mapping_module.f90
+    CALL oblimap_close_netcdf_file(im_netcdf_file)
+    stop
 
     DO record_counter = 0, C%gcm_record_range(2) - C%gcm_record_range(1)
      ! Output: gcm_field, time

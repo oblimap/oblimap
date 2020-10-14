@@ -197,6 +197,11 @@ CONTAINS
     ! Output: im_netcdf_file
     CALL create_netcdf_for_im_grid(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, gcm_netcdf_file, im_netcdf_file)
 
+    CALL oblimap_close_netcdf_file(im_netcdf_file)
+    call MPI_Barrier(MPI_COMM_WORLD)
+    call MPI_Finalize()
+    stop
+
     allocate(mask_of_invalid_contributions(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
     allocate(gcm_field(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
     allocate( im_field(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers))

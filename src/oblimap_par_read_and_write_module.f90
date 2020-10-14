@@ -66,6 +66,7 @@ MODULE oblimap_read_and_write_module
    !INTEGER,            DIMENSION(:), ALLOCATABLE :: case                             ! A number for each situation, for case selection
 
     INTEGER,            DIMENSION(:), ALLOCATABLE :: LEN_DIM                          ! Contains the dimensional size of each dimension
+    integer :: starts(3), counts(3)                                                   ! Start ID and local number of points on the local proc
    !INTEGER                                       :: NDIM                             ! The number of dimensions
    !INTEGER                                       :: NVAR                             ! The number of different variables
    !INTEGER                                       :: N_loop                           ! The number of loops in which the dimensions + variables are written to the netcdf file
@@ -244,8 +245,10 @@ CONTAINS
                                         LEN_DIM_1, LEN_DIM_2, coordinates_dimension_1, coordinates_dimension_2, vertical_axis, nc)
     ! This routine creates a netcdf file, the netcdf format is specified. In case the horizontal spatial coordinates are not specified by the optional
     ! arguments, a default 2D horizontal spatial C%NX by C%NY grid is assumed with grid sizes C%dx and C%dy.
-    USE oblimap_configuration_module, ONLY: dp, C
-    USE netcdf, ONLY: nf90_create, nf90_clobber, nf90_def_dim, nf90_def_var, nf90_unlimited, nf90_double, nf90_float, nf90_put_att, nf90_global, nf90_enddef, nf90_put_var
+    USE oblimap_configuration_module, ONLY: dp, C, PAR
+    USE netcdf, ONLY: nf90_create, nf90_clobber, nf90_def_dim, nf90_def_var, nf90_unlimited, nf90_double, nf90_float, nf90_put_att, nf90_global, nf90_enddef, nf90_put_var, nf90_netcdf4
+    use mpi_f08
+    use mpi_helpers_mod
     IMPLICIT NONE
 
     ! Input variables:
@@ -274,10 +277,18 @@ CONTAINS
     LOGICAL                                                                           :: include_vertical_dimension
     LOGICAL                                                                           :: coordinates_dimension_1_are_1D
     LOGICAL                                                                           :: coordinates_dimension_2_are_1D
-    REAL(dp)          , DIMENSION(LEN_DIM_1,LEN_DIM_2)                                :: coordinates_dimension_1_2D     ! 2D coordinates for the first  spatial dimension
-    REAL(dp)          , DIMENSION(LEN_DIM_1,LEN_DIM_2)                                :: coordinates_dimension_2_2D     ! 2D coordinates for the second spatial dimension
-    REAL(dp)          , DIMENSION(LEN_DIM_1          )                                :: coordinates_dimension_1_1D     ! 1D coordinates for the first  spatial dimension
-    REAL(dp)          , DIMENSION(          LEN_DIM_2)                                :: coordinates_dimension_2_1D     ! 1D coordinates for the second spatial dimension
+    !REAL(dp)          , DIMENSION(LEN_DIM_1,LEN_DIM_2)                                :: coordinates_dimension_1_2D     ! 2D coordinates for the first  spatial dimension
+    !REAL(dp)          , DIMENSION(LEN_DIM_1,LEN_DIM_2)                                :: coordinates_dimension_2_2D     ! 2D coordinates for the second spatial dimension
+    !REAL(dp)          , DIMENSION(LEN_DIM_1          )                                :: coordinates_dimension_1_1D     ! 1D coordinates for the first  spatial dimension
+    !REAL(dp)          , DIMENSION(          LEN_DIM_2)                                :: coordinates_dimension_2_1D     ! 1D coordinates for the second spatial dimension
+    real(dp), dimension(:,:), pointer :: coordinates_dimension_1_2D, coordinates_dimension_1_2D_
+    real(dp), dimension(:,:), pointer :: coordinates_dimension_2_2D, coordinates_dimension_2_2D_
+    real(dp), dimension(:  ), pointer :: coordinates_dimension_1_1D, coordinates_dimension_1_1D_
+    real(dp), dimension(  :), pointer :: coordinates_dimension_2_1D, coordinates_dimension_2_1D_
+    type(MPI_Win) :: coordinates_dimension_1_2D_win
+    type(MPI_Win) :: coordinates_dimension_2_2D_win
+    type(MPI_Win) :: coordinates_dimension_1_1D_win
+    type(MPI_Win) :: coordinates_dimension_2_1D_win
 
     IF(C%use_double_instead_of_float_in_netcdf) THEN
      xtype_in_netcdf = nf90_double
@@ -313,6 +324,40 @@ CONTAINS
 
     nc%LEN_DIM(1) = LEN_DIM_1
     nc%LEN_DIM(2) = LEN_DIM_2
+
+    if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
+      call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                       , C%NY, PAR%ny0, PAR%ny1 &
+                       , coordinates_dimension_1_2D &
+                       , coordinates_dimension_1_2D_ &
+                       , coordinates_dimension_1_2D_win, PAR%shared_comm)
+      call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                       , C%NY, PAR%ny0, PAR%ny1 &
+                       , coordinates_dimension_2_2D &
+                       , coordinates_dimension_2_2D_ &
+                       , coordinates_dimension_2_2D_win, PAR%shared_comm)
+
+      call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                       , coordinates_dimension_1_1D &
+                       , coordinates_dimension_1_1D_ &
+                       , coordinates_dimension_1_1D_win, PAR%shared_comm)
+      call alloc_shared( C%NY, PAR%ny0, PAR%ny1 &
+                       , coordinates_dimension_2_1D &
+                       , coordinates_dimension_2_1D_ &
+                       , coordinates_dimension_2_1D_win, PAR%shared_comm)
+
+      nc%starts(1) = PAR%nx0
+      nc%starts(2) = PAR%ny0
+      nc%starts(3) = 1
+
+      nc%counts(1) = PAR%nx1-PAR%nx0+1
+      nc%counts(2) = PAR%ny1-PAR%ny0+1
+      nc%counts(3) = 1
+
+    else
+      write(*,*) ' [ x] From oblimap_create_netcdf_file(): LEN_DIM_1 /= NX or LEN_DIM_2 /= NY'
+      call MPI_Abort(MPI_COMM_WORLD, -1)
+    endif
 
     ! If both optional arguments coordinates_dimension_1 and coordinates_dimension_2 are specified, then this inititialization can be omitted:
     IF(.NOT.(PRESENT(coordinates_dimension_1) .AND. PRESENT(coordinates_dimension_2))) &
@@ -360,11 +405,17 @@ CONTAINS
      include_vertical_dimension = .FALSE.
      nc%LEN_DIM(3)              = 1                             ! To save a waste of allocation and computational time in case C%number_of_vertical_layers is initiated to a higher number
     END IF
+    nc%counts(3) = nc%LEN_DIM(3)
 
     CALL check_file_existence(nc%file_name)
 
     ! Create the netcdf file:
-    CALL handle_error(nf90_create(nc%file_name, nf90_clobber, nc%ncid))
+    CALL handle_error(nf90_create( nc%file_name, ior(nf90_clobber, nf90_netcdf4), nc%ncid &
+                                 , comm=MPI_COMM_WORLD%MPI_VAL, info=MPI_INFO_NULL%MPI_VAL &
+                                 ))
+    ! TODO avoid autofilling
+    ! call handle_error(nc_set_fill(nc%ncid, NC_NOFILL, old_mode))
+    ! TODO don't forget LUSTRE: stripe count and striping buffer size
 
     ! Define the dimension dimensions:
     IF(nc%include_time_dimension)     &
@@ -446,24 +497,24 @@ CONTAINS
 
     CALL handle_error(   nf90_enddef(nc%ncid))
 
-
     ! Put the coordinates of dimension 1:
     IF(coordinates_dimension_1_are_1D) THEN
-     CALL handle_error(nf90_put_var( nc%ncid, nc%id(-2), coordinates_dimension_1_1D    ), '. [32] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-2))//'" in the file '//TRIM(nc%file_name))
+     CALL handle_error(nf90_put_var( nc%ncid, nc%id(-2), coordinates_dimension_1_1D_    , start=nc%starts(1:1), count=nc%counts(1:1)), '. [32] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-2))//'" in the file '//TRIM(nc%file_name))
     ELSE
-     CALL handle_error(nf90_put_var( nc%ncid, nc%id(-2), coordinates_dimension_1_2D    ), '. [33] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-2))//'" in the file '//TRIM(nc%file_name))
+     CALL handle_error(nf90_put_var( nc%ncid, nc%id(-2), coordinates_dimension_1_2D_    , start=nc%starts(1:2), count=nc%counts(1:2)), '. [33] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-2))//'" in the file '//TRIM(nc%file_name))
     END IF
 
     IF(include_two_spatial_dimensions) THEN
      ! Put the coordinates of dimension 2:
      IF(coordinates_dimension_2_are_1D) THEN
-      CALL handle_error(nf90_put_var(nc%ncid, nc%id(-4), coordinates_dimension_2_1D    ), '. [34] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-4))//'" in the file '//TRIM(nc%file_name))
+      CALL handle_error(nf90_put_var(nc%ncid, nc%id(-4), coordinates_dimension_2_1D_    , start=nc%starts(2:2), count=nc%counts(2:2)), '. [34] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-4))//'" in the file '//TRIM(nc%file_name))
      ELSE
-      CALL handle_error(nf90_put_var(nc%ncid, nc%id(-4), coordinates_dimension_2_2D    ), '. [35] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-4))//'" in the file '//TRIM(nc%file_name))
+      CALL handle_error(nf90_put_var(nc%ncid, nc%id(-4), coordinates_dimension_2_2D_    , start=nc%starts(1:2), count=nc%counts(1:2)), '. [35] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-4))//'" in the file '//TRIM(nc%file_name))
      END IF
     END IF
 
     ! Put the vertical coordinate variable:
+    ! TODO write this in parallel (?)
     IF(include_vertical_dimension) THEN
      IF(PRESENT(vertical_axis)) THEN
       CALL handle_error(nf90_put_var(nc%ncid, nc%id(-6), vertical_axis                 ), '. [36] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-6))//'" in the file '//TRIM(nc%file_name))
@@ -471,6 +522,10 @@ CONTAINS
       CALL handle_error(nf90_put_var(nc%ncid, nc%id(-6), (/ (k, k=1, nc%LEN_DIM(3)) /) ), '. [37] From oblimap_create_netcdf_file(): it concerns the field "'//TRIM(nc%field_name(-6))//'" in the file '//TRIM(nc%file_name))
      END IF
     END IF
+    call MPI_Win_free(coordinates_dimension_1_2D_win)
+    call MPI_Win_free(coordinates_dimension_2_2D_win)
+    call MPI_Win_free(coordinates_dimension_1_1D_win)
+    call MPI_Win_free(coordinates_dimension_2_1D_win)
   END SUBROUTINE oblimap_create_netcdf_file
 
 
@@ -508,8 +563,8 @@ CONTAINS
     IMPLICIT NONE
 
     ! Input variables:
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(IN)  :: x_coordinates_of_im_grid_points
-    REAL(dp), DIMENSION(C%NX,C%NY), INTENT(IN)  :: y_coordinates_of_im_grid_points
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: x_coordinates_of_im_grid_points
+    REAL(dp), DIMENSION(:,:), INTENT(IN)  :: y_coordinates_of_im_grid_points
     TYPE(oblimap_netcdf_file_type), INTENT(IN)  :: nc_for_dimensional_shape
 
     ! Output variables:
@@ -608,11 +663,13 @@ CONTAINS
     INTEGER                                                                           , INTENT(IN)            :: record_number    ! time record number
 
     ! Output variables:
-    REAL(dp), DIMENSION(nc%number_of_fields,nc%LEN_DIM(1),nc%LEN_DIM(2),nc%LEN_DIM(3)), INTENT(OUT)           :: fields
+    !REAL(dp), DIMENSION(nc%number_of_fields,nc%LEN_DIM(1),nc%LEN_DIM(2),nc%LEN_DIM(3)), INTENT(OUT)           :: fields
+    real(dp), dimension(:,:,:,:), intent(out) :: fields
     REAL(dp)                                                                          , INTENT(OUT), OPTIONAL :: time
 
     ! Local variables:
     INTEGER                                                                                                   :: field_counter    ! The counter in the loop over the field numbers
+    integer, dimension(4) :: starts, counts
 
     ! In case time is in argument list, initialize in any case:
     IF(PRESENT(time)) time = 0.0_dp
@@ -719,12 +776,13 @@ CONTAINS
     ! Input variables:
     TYPE(oblimap_netcdf_file_type)                                                    , INTENT(IN)           :: nc
     INTEGER                                                                           , INTENT(IN)           :: record_number   ! time record number
-    REAL(dp), DIMENSION(nc%number_of_fields,nc%LEN_DIM(1),nc%LEN_DIM(2),nc%LEN_DIM(3)), INTENT(IN)           :: fields
+    REAL(dp), DIMENSION(:,:,:,:), INTENT(IN)           :: fields
     REAL(dp)                                                                          , INTENT(IN), OPTIONAL :: time
 
     ! Local variables:
     INTEGER                                                                                                  :: field_counter   ! The counter in the loop over the field numbers
     REAL(dp)                                                                                                 :: written_time
+    integer, dimension(4) :: starts, counts
 
     IF(PRESENT(time)) THEN
      written_time = time
@@ -744,24 +802,48 @@ CONTAINS
 
      IF(nc%include_time_dimension) THEN
       IF(nc%spatial_dimension_of_field(field_counter) == 3) THEN
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=(/1, 1, 1, record_number/)), &
+       ! 3D var
+       starts(1:3) = nc%starts(1:3)
+       starts(4)   = record_number
+       counts(1:3) = nc%counts(1:3)
+       counts(4)   = 1
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=starts(1:4), count=counts(1:4)), &
         '. [2] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE IF(nc%spatial_dimension_of_field(field_counter) == 1) THEN
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=(/1,       record_number/)), &
+       ! 1D var
+       starts(1) = nc%starts(1)
+       starts(2)   = record_number
+       counts(1) = nc%counts(1)
+       counts(2)   = 1
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=starts(1:2), count=counts(1:2)), &
         '. [3] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=(/1, 1,    record_number/)), &
+       ! 2D var
+       starts(1:2) = nc%starts(1:2)
+       starts(3)   = record_number
+       counts(1:2) = nc%counts(1:2)
+       counts(3)   = 1
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=starts(1:3), count=counts(1:3)), &
         '. [4] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       END IF
      ELSE
       IF(nc%spatial_dimension_of_field(field_counter) == 3) THEN
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=(/1, 1, 1/)), &
+       ! 3D var
+       starts(1:3) = nc%starts(1:3)
+       counts(1:3) = nc%counts(1:3)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,:), start=starts(1:3), count=counts(1:3)), &
         '. [5] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE IF(nc%spatial_dimension_of_field(field_counter) == 1) THEN
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=(/1      /)), &
+       ! 1D var
+       starts(1) = nc%starts(1)
+       counts(1) = nc%counts(1)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,1,1), start=starts(1:2), count=counts(1:2)), &
         '. [6] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       ELSE
-       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=(/1, 1   /)), &
+       ! 2D var
+       starts(1:2) = nc%starts(1:2)
+       counts(1:2) = nc%counts(1:2)
+       CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), fields(field_counter,:,:,1), start=starts(1:1), count=counts(1:1)), &
         '. [7] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
       END IF
      END IF
