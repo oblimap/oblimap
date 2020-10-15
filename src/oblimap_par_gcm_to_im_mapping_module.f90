@@ -189,12 +189,6 @@ CONTAINS
      END IF
     END IF
 
-    ! TODO implement shared up to this point
-    !call MPI_Abort(MPI_COMM_WORLD, 0)
-    call MPI_Barrier(MPI_COMM_WORLD)
-    call MPI_Finalize()
-    stop
-
     ! Reading the contributions of the scanned projection data into the Dynamic Data Object (DDO):
     ! Output: oblimap_ddo
     CALL oblimap_read_sid_file(C%sid_filename, oblimap_ddo)
