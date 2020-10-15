@@ -158,6 +158,8 @@ MODULE oblimap_configuration_module
       LOGICAL                                    :: protect_file_overwriting_config                  = .TRUE.                                               ! config variable
       LOGICAL                                    :: enable_color_messaging_in_terminal_config        = .TRUE.                                               ! config variable
 
+      logical :: nc_parallel_mode_config = .true.
+
 
     ! TYPE DEFENITIONS
     !=================
@@ -293,6 +295,8 @@ MODULE oblimap_configuration_module
         INTEGER                                    :: number_of_processors
         INTEGER                                    :: max_nr_of_lines_per_partition_block ! The maximum numberr of lines per partition block, in a MPI parallel approach
         INTEGER                                    :: psi_process_dependent               ! Partition starting index, in a MPI parallel approach
+
+        logical :: nc_parallel_mode
       END TYPE constants_type
 
       ! C is the 'struct' containing all the Constants from the config file and/or the defaults
@@ -486,7 +490,8 @@ CONTAINS
                      use_double_instead_of_float_in_netcdf_config              , &
                      synchronize_netcdf_writing_config                         , &
                      protect_file_overwriting_config                           , &
-                     enable_color_messaging_in_terminal_config
+                     enable_color_messaging_in_terminal_config                 , &
+                     nc_parallel_mode_config
 
     ! Open the configuration file and read it:
     OPEN(UNIT=config_unit, FILE=TRIM(config_filename), STATUS='OLD', ACTION='READ', IOSTAT=ios)
@@ -928,6 +933,8 @@ CONTAINS
 
     ! Physical parameters:
     C%earth_radius                                   = earth_radius_config                                   ! Earth Radius [m]
+
+    C%nc_parallel_mode                               = nc_parallel_mode_config
   END SUBROUTINE initialize_constants
 
 
