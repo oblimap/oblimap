@@ -256,7 +256,7 @@ CONTAINS
      END DO
      END DO
 
-     IF(C%gcm_record_range(2) - C%gcm_record_range(1) > 0) &
+     IF(C%gcm_record_range(2) - C%gcm_record_range(1) > 0 .and. PAR%rank_shared == 0) &
       WRITE(UNIT=*, FMT='(A, I4, A)') ' Time record ', 1 + record_counter, ' is written by OBLIMAP.'
 
      ! Finally the mapped fields im_field are written to an output file:
@@ -271,7 +271,7 @@ CONTAINS
 
     IF(C%reduce_dummy_dimensions) CALL reduce_dummy_dimensions(C%im_created_filename, C%number_of_mapped_fields, C%im_field_name, C%NX, C%NY)
 
-    IF(C%oblimap_message_level > 0) THEN
+    IF(C%oblimap_message_level > 0 .and. PAR%rank_shared == 0) THEN
      WRITE(UNIT=*, FMT='(A)')
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
@@ -282,7 +282,7 @@ CONTAINS
     END IF
 
     ! Finishing message:
-    WRITE(UNIT=*, FMT='(/3A/2A/)') ' Finished! The file  ', TRIM(C%im_created_filename), '  is created. Which can be viewed by:', '  ncview ', TRIM(C%im_created_filename)
+    if(PAR%rank_shared) WRITE(UNIT=*, FMT='(/3A/2A/)') ' Finished! The file  ', TRIM(C%im_created_filename), '  is created. Which can be viewed by:', '  ncview ', TRIM(C%im_created_filename)
 
     ! Output: -
     CALL oblimap_deallocate_ddo(oblimap_ddo)
