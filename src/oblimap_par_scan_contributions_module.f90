@@ -1099,7 +1099,7 @@ CONTAINS
     OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
 
     i_start = PAR%nlon0
-    i_end = PAR%nlat1
+    i_end = PAR%nlon1
 
     IF(PAR%rank_shared == 0) THEN
      ! For each GCM grid point the four nearest projected IM points are determined:
@@ -1144,7 +1144,7 @@ CONTAINS
         do_full_scan = .FALSE.
         pivot_contribution = nearest_contribution(i,j-1)
      !!ELSE IF(i == 1) THEN
-       ELSE IF(i_start == 1) THEN
+       ELSE IF(i == i_start) THEN
         ! Low frequent situation (If no neighbour contribution at the same row is found, it is not possible to try the previous row, because i == 1 is the lowest and first scanned row)
         do_full_scan = .TRUE.
         pivot_contribution = no_contribution
@@ -2036,7 +2036,7 @@ CONTAINS
     REAL(dp)                                        :: x_gcm
     REAL(dp)                                        :: y_gcm
 
-    mapping_participation_mask = 0
+    mapping_participation_mask(PAR%nlon0:PAR%nlon1, PAR%nlat0:PAR%nlat1) = 0
     ! TODO profile original loop
     ! Output: x_gcm, y_gcm
     SELECT CASE(C%choice_projection_method)
