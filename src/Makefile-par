@@ -112,7 +112,7 @@ oblimap_par_im_to_gcm_program_objects+=oblimap_par_read_and_write_module.o
 oblimap_par_im_to_gcm_program_objects+=oblimap_projection_module.o
 oblimap_par_im_to_gcm_program_objects+=oblimap_par_mapping_module.o
 oblimap_par_im_to_gcm_program_objects+=oblimap_par_scan_contributions_module.o
-oblimap_par_im_to_gcm_program_objects+=oblimap_im_to_gcm_mapping_module.o
+oblimap_par_im_to_gcm_program_objects+=oblimap_par_im_to_gcm_mapping_module.o
 oblimap_par_im_to_gcm_program_objects+=oblimap_par_im_to_gcm_program.o
 
 # The executable (the target) depends on the object files:

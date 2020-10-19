@@ -76,7 +76,12 @@ PROGRAM oblimap_par_im_to_gcm_program
 
   ! 1D decomposition
   PAR%ny0 = 1
-  PAR%ny1 = C%NLAT
+  PAR%ny1 = C%NY
+
+  call decompose(C%NX, PAR%nshared_procs, PAR%rank_shared, PAR%nx0, PAR%nx1)
+
+  PAR%nlat0 = 1
+  PAR%nlat1 = C%NLAT
 
   call decompose(C%NLON, PAR%nshared_procs, PAR%rank_shared, PAR%nlon0, PAR%nlon1)
 
