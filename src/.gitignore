@@ -4,3 +4,4 @@ object-files
 oblimap_convert_program
 oblimap_par_gcm_to_im_program
 oblimap_par_im_to_gcm_program
+*.orig
