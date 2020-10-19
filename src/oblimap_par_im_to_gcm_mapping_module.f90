@@ -98,25 +98,35 @@ CONTAINS
     ! gcm_field_*
     !   Contains the to and fro mapped GCM fields merged with the initial_gcm_field_*.
     !
-    USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type, check_directory_existence
+    USE oblimap_configuration_module, ONLY: dp, C, oblimap_scan_parameter_type, check_directory_existence, PAR
     USE oblimap_read_and_write_module, ONLY: oblimap_netcdf_file_type, oblimap_open_netcdf_file, initialize_im_coordinates, create_netcdf_for_gcm_grid, &
           oblimap_read_netcdf_fields, oblimap_write_netcdf_fields, oblimap_close_netcdf_file, reduce_dummy_dimensions
     USE oblimap_scan_contributions_module, ONLY: make_mapping_participation_mask, scan_with_radius_method_im_to_gcm, scan_with_quadrant_method_im_to_gcm, &
           shifting_center_im_grid, determining_scan_parameters
     USE oblimap_mapping_module, ONLY: oblimap_ddo_type, oblimap_read_sid_file, oblimap_mapping, oblimap_deallocate_ddo
+    use mpi_helpers_mod
+    use mpi_f08
     IMPLICIT NONE
 
     ! Local variables:
-    REAL(dp), DIMENSION(                          C%NLON,C%NLAT                            ) :: lon_gcm
-    REAL(dp), DIMENSION(                          C%NLON,C%NLAT                            ) :: lat_gcm
-    REAL(dp), DIMENSION(                          C%NX  ,C%NY                              ) :: x_coordinates_of_im_grid_points  ! The x-coordinates of the IM points in S'
-    REAL(dp), DIMENSION(                          C%NX  ,C%NY                              ) :: y_coordinates_of_im_grid_points  ! The y-coordinates of the IM points in S'
-    INTEGER,  DIMENSION(                          C%NLON,C%NLAT                            ) :: mapping_participation_mask       ! A mask for points which participate (mask = 1) in the mapping, so which fall within the mapped area.
-    LOGICAL,  DIMENSION(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers) :: mask_of_invalid_contributions    ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values) of the IM grid points
-    REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers) :: im_field
-    REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: initial_gcm_field
-    REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: mapped_gcm_field
-    REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: gcm_field
+    !REAL(dp), DIMENSION(                          C%NLON,C%NLAT                            ) :: lon_gcm
+    !REAL(dp), DIMENSION(                          C%NLON,C%NLAT                            ) :: lat_gcm
+    real(DP), dimension(:,:), pointer :: lon_gcm, lon_gcm_ ! global shared pointer and local one
+    real(DP), dimension(:,:), pointer :: lat_gcm, lat_gcm_
+
+    !REAL(dp), DIMENSION(                          C%NX  ,C%NY                              ) :: x_coordinates_of_im_grid_points  ! The x-coordinates of the IM points in S'
+    !REAL(dp), DIMENSION(                          C%NX  ,C%NY                              ) :: y_coordinates_of_im_grid_points  ! The y-coordinates of the IM points in S'
+    real(DP), dimension(:,:), pointer :: x_coordinates_of_im_grid_points, x_coordinates_of_im_grid_points_ ! global shared pointer and local one
+    real(DP), dimension(:,:), pointer :: y_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points_
+    integer, dimension(:,:), pointer :: mapping_participation_mask, mapping_participation_mask_
+
+    LOGICAL,  DIMENSION(:,:,:,:), pointer :: mask_of_invalid_contributions, mask_of_invalid_contributions_    ! For each field and for each layer a mask represents the invalid contributions (like e.g. missing values) of the GCM grid points
+    REAL(dp), DIMENSION(:,:,:,:), pointer :: gcm_field, gcm_field_
+    REAL(dp), DIMENSION(:,:,:,:), pointer :: im_field, im_field_
+    !REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: initial_gcm_field
+    !REAL(dp), DIMENSION(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers) :: mapped_gcm_field
+    REAL(dp), DIMENSION(:,:,:,:), pointer :: initial_gcm_field, initial_gcm_field_
+    REAL(dp), DIMENSION(:,:,:,:), pointer :: mapped_gcm_field, mapped_gcm_field_
     REAL(dp)                                                                                 :: time                             ! The time value for the considered record
     INTEGER                                                                                  :: field_counter                    ! The counter in the loop over the field numbers
     INTEGER                                                                                  :: record_counter                   ! The counter over the time records
@@ -126,7 +136,47 @@ CONTAINS
     TYPE(oblimap_netcdf_file_type)                                                           :: created_gcm_netcdf_file
     TYPE(oblimap_ddo_type)                                                                   :: oblimap_ddo                      ! The DDO containing all the scanned contributions
     TYPE(oblimap_scan_parameter_type)                                                        :: advised_scan_parameter
+    type(MPI_Win) :: lon_gcm_win, lat_gcm_win
+    type(MPI_Win) :: x_coordinates_of_im_grid_points_win
+    type(MPI_Win) :: y_coordinates_of_im_grid_points_win
+    type(MPI_Win) :: mapping_participation_mask_win
+    type(MPI_Win) :: mask_of_invalid_contributions_win
+    type(MPI_Win) :: gcm_field_win
+    type(MPI_Win) :: im_field_win
+    type(MPI_Win) :: mapped_gcm_field_win
+    type(MPI_Win) :: initial_gcm_field_win
 
+    ! TODO allocate lon_gcm
+    ! TODO allocate lat_gcm
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , lon_gcm, lon_gcm_ &
+                     , lon_gcm_win &
+                     , PAR%shared_comm)
+
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , lat_gcm, lat_gcm_ &
+                     , lat_gcm_win &
+                     , PAR%shared_comm)
+
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , x_coordinates_of_im_grid_points &
+                     , x_coordinates_of_im_grid_points_ &
+                     , x_coordinates_of_im_grid_points_win, PAR%shared_comm)
+
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , y_coordinates_of_im_grid_points &
+                     , y_coordinates_of_im_grid_points_ &
+                     , y_coordinates_of_im_grid_points_win, PAR%shared_comm)
+
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , mapping_participation_mask, mapping_participation_mask_ &
+                     , mapping_participation_mask_win &
+                     , PAR%shared_comm)
 
     ! Check whether the directory in the path of C%gcm_created_filename exists:
     CALL check_directory_existence(C%gcm_created_filename)
@@ -136,12 +186,12 @@ CONTAINS
     CALL oblimap_open_netcdf_file(C%gcm_input_filename, C%number_of_mapped_fields, C%gcm_field_name, C%NLON, C%NLAT, lon_gcm, lat_gcm, .TRUE., nc = initial_gcm_netcdf_file)
 
     IF(C%choice_projection_method == 'rotation_projection') THEN
-     lon_gcm = lon_gcm - C%shift_x_coordinate_rotation_projection
-     lat_gcm = lat_gcm - C%shift_y_coordinate_rotation_projection
+     lon_gcm_ = lon_gcm_ - C%shift_x_coordinate_rotation_projection
+     lat_gcm_ = lat_gcm_ - C%shift_y_coordinate_rotation_projection
     ELSE
      ! It is required that all angles are in the 0 - 360 degree range:
-     WHERE(lon_gcm <    0._dp) lon_gcm = lon_gcm + 360._dp
-     WHERE(lon_gcm >= 360._dp) lon_gcm = lon_gcm - 360._dp
+     WHERE(lon_gcm_ <    0._dp) lon_gcm_ = lon_gcm_ + 360._dp
+     WHERE(lon_gcm_ >= 360._dp) lon_gcm_ = lon_gcm_ - 360._dp
     END IF
 
     ! Output: im_netcdf_file
@@ -196,6 +246,42 @@ CONTAINS
     ! Output: -
     CALL create_netcdf_for_gcm_grid(lon_gcm, lat_gcm, im_netcdf_file, created_gcm_netcdf_file)
 
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , mask_of_invalid_contributions, mask_of_invalid_contributions_ &
+                     , mask_of_invalid_contributions_win &
+                     , PAR%shared_comm)
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , gcm_field, gcm_field_ &
+                     , gcm_field_win &
+                     , PAR%shared_comm)
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , initial_gcm_field, initial_gcm_field_ &
+                     , initial_gcm_field_win &
+                     , PAR%shared_comm)
+    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
+                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , mapped_gcm_field, mapped_gcm_field_ &
+                     , mapped_gcm_field_win &
+                     , PAR%shared_comm)
+    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+                     , C%NY, PAR%ny0, PAR%ny1 &
+                     , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
+                     , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
+                     , im_field, im_field_ &
+                     , im_field_win &
+                     , PAR%shared_comm)
+
     ! From the IM netcdf file we read the IM variables which will be mapped:
     DO record_counter = 0, C%im_record_range(2) - C%im_record_range(1)
 
@@ -204,20 +290,22 @@ CONTAINS
 
      ! Output: im_field, time
      CALL oblimap_read_netcdf_fields(im_netcdf_file, C%im_record_range(1) + record_counter, im_field, time)
+     CALL MPI_Barrier(PAR%shared_comm)
 
      ! Determine the mask_of_invalid_contributions based on the invalid values for the specified field:
-     mask_of_invalid_contributions = .FALSE.
+     mask_of_invalid_contributions_ = .FALSE.
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
-       IF(C%masked_fields(field_counter)) WHERE(im_field(C%field_which_determines_invalid_value_mask(field_counter),:,:,layer_counter) == C%invalid_input_value(field_counter)) &
-        mask_of_invalid_contributions(field_counter,:,:,layer_counter) = .TRUE.
+       IF(C%masked_fields(field_counter)) WHERE(im_field_(:,:,layer_counter,C%field_which_determines_invalid_value_mask(field_counter)) == C%invalid_input_value(field_counter)) &
+        mask_of_invalid_contributions_(:,:,layer_counter,field_counter) = .TRUE.
      END DO
      END DO
 
      ! Rescaling each field by multiplication with a im_to_gcm_factor and by adding a im_to_gcm_shift (in case the units differ):
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
-       WHERE(im_field(field_counter,:,:,layer_counter) /= C%invalid_input_value(field_counter)) im_field(field_counter,:,:,layer_counter) = C%field_factor(field_counter) * im_field(field_counter,:,:,layer_counter) + C%field_shift(field_counter)
+       WHERE(im_field_(:,:,layer_counter,field_counter) /= C%invalid_input_value(field_counter)) &
+               im_field_(:,:,layer_counter,field_counter) = C%field_factor(field_counter) * im_field_(:,:,layer_counter,field_counter) + C%field_shift(field_counter)
      END DO
      END DO
 
@@ -225,15 +313,17 @@ CONTAINS
      ! the relative distances of the nearest projected points are stored in the C%sid_filename file, these are
      ! used here to map the fields:
      ! Output: mapped_gcm_field
+     CALL MPI_Barrier(PAR%shared_comm)
      CALL oblimap_mapping(oblimap_ddo, C%NX, C%NY, C%NLON, C%NLAT, mask_of_invalid_contributions, im_field, mapped_gcm_field)
 
      ! Compose the fields which are given back to GCM. Part of these fields (the coordinates with mapping_participation_mask == 0) are
      ! the same as the original GCM fields: initial_gcm_field_*, and the rest of them equal the mapped values as in mapped_gcm_field_*.
+     CALL MPI_Barrier(PAR%shared_comm)
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
-       gcm_field(field_counter,:,:,layer_counter) =        mapping_participation_mask(:,:)  * mapped_gcm_field (field_counter,:,:,layer_counter) &
-                                                    + (1 - mapping_participation_mask(:,:)) * initial_gcm_field(field_counter,:,:,layer_counter)
-      WHERE(gcm_field(field_counter,:,:,layer_counter) == C%invalid_input_value(field_counter)) gcm_field(field_counter,:,:,layer_counter) = C%invalid_output_value(field_counter)
+       gcm_field_(:,:,layer_counter,field_counter) =       mapping_participation_mask_(:,:)  * mapped_gcm_field_ (:,:,layer_counter,field_counter) &
+                                                    + (1 - mapping_participation_mask_(:,:)) * initial_gcm_field_(:,:,layer_counter,field_counter)
+       WHERE(gcm_field_(:,:,layer_counter,field_counter) == C%invalid_input_value(field_counter)) gcm_field_(:,:,layer_counter,field_counter) = C%invalid_output_value(field_counter)
      END DO
      END DO
 
@@ -256,6 +346,7 @@ CONTAINS
 
      ! Finally the mapped fields gcm_field are written to an output file:
      ! Output: -
+     CALL MPI_Barrier(PAR%shared_comm)
      CALL oblimap_write_netcdf_fields(created_gcm_netcdf_file, 1 + record_counter, gcm_field, time)
     END DO
 
@@ -266,7 +357,7 @@ CONTAINS
 
     IF(C%reduce_dummy_dimensions) CALL reduce_dummy_dimensions(C%gcm_created_filename, C%number_of_mapped_fields, C%gcm_field_name, C%NLON, C%NLAT)
 
-    IF(C%oblimap_message_level > 0) THEN
+    IF(C%oblimap_message_level > 0 .and. PAR%rank_shared == 0) THEN
      WRITE(UNIT=*, FMT='(A)')
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
@@ -281,6 +372,20 @@ CONTAINS
 
     ! Output: -
     CALL oblimap_deallocate_ddo(oblimap_ddo)
+    !deallocate(mask_of_invalid_contributions)
+    !deallocate(gcm_field)
+    !deallocate( im_field)
+    call MPI_Win_free(mask_of_invalid_contributions_win)
+    call MPI_Win_free(gcm_field_win)
+    call MPI_Win_free(im_field_win)
+    call MPI_Win_free(mapped_gcm_field_win)
+    call MPI_Win_free(initial_gcm_field_win)
+
+    call MPI_Win_free(lon_gcm_win)
+    call MPI_Win_free(lat_gcm_win)
+    call MPI_Win_free(x_coordinates_of_im_grid_points_win)
+    call MPI_Win_free(y_coordinates_of_im_grid_points_win)
+    call MPI_Win_free(mapping_participation_mask_win)
 
   END SUBROUTINE oblimap_im_to_gcm_mapping
 
