@@ -231,7 +231,7 @@ CONTAINS
      CALL MPI_Barrier(PAR%shared_comm)
 
      ! Determine the mask_of_invalid_contributions based on the invalid values for the specified field:
-     mask_of_invalid_contributions = .FALSE.
+     mask_of_invalid_contributions_ = .FALSE.
      DO field_counter = 1, C%number_of_mapped_fields
      DO layer_counter = 1, C%number_of_vertical_layers
        IF(C%masked_fields(field_counter)) WHERE(gcm_field_(:,:,layer_counter,C%field_which_determines_invalid_value_mask(field_counter)) == C%invalid_input_value(field_counter)) &
