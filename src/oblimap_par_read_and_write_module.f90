@@ -387,8 +387,37 @@ CONTAINS
         nc%counts(2) = PAR%ny1-PAR%ny0+1
         nc%counts(3) = 1
 
+      elseif(LEN_DIM_1 == C%NLON .and. LEN_DIM_2 == C%NLAT) then
+        call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
+                         , C%NLAT, par%nlat0, par%nlat1 &
+                         , coordinates_dimension_1_2D &
+                         , coordinates_dimension_1_2D_ &
+                         , coordinates_dimension_1_2D_win, PAR%shared_comm)
+        call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
+                         , C%NLAT, par%nlat0, par%nlat1 &
+                         , coordinates_dimension_2_2D &
+                         , coordinates_dimension_2_2D_ &
+                         , coordinates_dimension_2_2D_win, PAR%shared_comm)
+
+        call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
+                         , coordinates_dimension_1_1D &
+                         , coordinates_dimension_1_1D_ &
+                         , coordinates_dimension_1_1D_win, PAR%shared_comm)
+        call alloc_shared( C%NLAT, par%nlat0, par%nlat1 &
+                         , coordinates_dimension_2_1D &
+                         , coordinates_dimension_2_1D_ &
+                         , coordinates_dimension_2_1D_win, PAR%shared_comm)
+
+        nc%starts(1) = par%nlon0
+        nc%starts(2) = par%nlat0
+        nc%starts(3) = 1
+
+        nc%counts(1) = par%nlon1-par%nlon0+1
+        nc%counts(2) = par%nlat1-par%nlat0+1
+        nc%counts(3) = 1
+
       else
-        write(*,*) ' [ x] From oblimap_create_netcdf_file(): LEN_DIM_1 /= NX or LEN_DIM_2 /= NY'
+        write(*,*) ' [ x] From oblimap_create_netcdf_file(): (LEN_DIM_1 /= NX or LEN_DIM_2 /= NY) or (LEN_DIM_1 /= NLON or LEN_DIM_2 /= NLAT)'
         call MPI_Abort(MPI_COMM_WORLD, -1)
       endif
     else
@@ -400,10 +429,10 @@ CONTAINS
         nc%counts = 0
       endif
 
-      allocate(coordinates_dimension_1_2D(C%NX, C%NY))
-      allocate(coordinates_dimension_2_2D(C%NX, C%NY))
-      allocate(coordinates_dimension_1_1D(C%NX      ))
-      allocate(coordinates_dimension_2_1D(      C%NY))
+      allocate(coordinates_dimension_1_2D(LEN_DIM_1, LEN_DIM_2))
+      allocate(coordinates_dimension_2_2D(LEN_DIM_1, LEN_DIM_2))
+      allocate(coordinates_dimension_1_1D(LEN_DIM_1           ))
+      allocate(coordinates_dimension_2_1D(           LEN_DIM_2))
     endif
 
     ! If both optional arguments coordinates_dimension_1 and coordinates_dimension_2 are specified, then this inititialization can be omitted:
