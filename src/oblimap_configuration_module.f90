@@ -158,7 +158,7 @@ MODULE oblimap_configuration_module
       LOGICAL                                    :: protect_file_overwriting_config                  = .TRUE.                                               ! config variable
       LOGICAL                                    :: enable_color_messaging_in_terminal_config        = .TRUE.                                               ! config variable
 
-      logical :: nc_parallel_mode_config = .true.
+      logical :: nc_parallel_mode_config = .false.
 
 
     ! TYPE DEFENITIONS
