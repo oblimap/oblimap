@@ -143,34 +143,24 @@ CONTAINS
     nc%LEN_DIM(2) = LEN_DIM_2
     nc%LEN_DIM(3) = C%number_of_vertical_layers                                                ! Number of vertical layers, i.e. number of grid points of the vertical coordinate
 
-    if(C%nc_parallel_mode) then
-      if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
-        nc%starts(1) = PAR%nx0
-        nc%starts(2) = PAR%ny0
+    if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
+      nc%starts(1) = PAR%io_in_nx0
+      nc%starts(2) = PAR%io_in_ny0
 
-        nc%counts(1) = PAR%nx1-PAR%nx0+1
-        nc%counts(2) = PAR%ny1-PAR%ny0+1
-      else if(LEN_DIM_1 == C%NLON .and. LEN_DIM_2 == C%NLAT) then
-        nc%starts(1) = PAR%nlon0
-        nc%starts(2) = PAR%nlat0
+      nc%counts(1) = PAR%io_in_nx1-PAR%io_in_nx0+1
+      nc%counts(2) = PAR%io_in_ny1-PAR%io_in_ny0+1
+    else if(LEN_DIM_1 == C%NLON .and. LEN_DIM_2 == C%NLAT) then
+      nc%starts(1) = PAR%io_in_nlon0
+      nc%starts(2) = PAR%io_in_nlat0
 
-        nc%counts(1) = PAR%nlon1-PAR%nlon0+1
-        nc%counts(2) = PAR%nlat1-PAR%nlat0+1
-      else
-        write(*,*) ' [ x] From oblimap_open_netcdf_file(): LEN_DIM_1 /= NX|NLON or LEN_DIM_2 /= NY|NLAT'
-        call MPI_Abort(MPI_COMM_WORLD, -1)
-      endif
-      nc%starts(3) = 1
-      nc%counts(3) = nc%LEN_DIM(3)
+      nc%counts(1) = PAR%io_in_nlon1-PAR%io_in_nlon0+1
+      nc%counts(2) = PAR%io_in_nlat1-PAR%io_in_nlat0+1
     else
-      if(PAR%rank_shared == 0) then
-      nc%starts = 1
-      nc%counts = nc%LEN_DIM
-      else
-      nc%starts = nc%LEN_DIM
-      nc%counts = 0
-      endif
+      write(*,*) ' [ x] From oblimap_open_netcdf_file(): LEN_DIM_1 /= NX|NLON or LEN_DIM_2 /= NY|NLAT'
+      call MPI_Abort(MPI_COMM_WORLD, -1)
     endif
+    nc%starts(3) = 1
+    nc%counts(3) = nc%LEN_DIM(3)
 
     ! Open the netcdf file:
     CALL handle_error(nf90_open(nc%file_name, nf90_nowrite, nc%ncid &
@@ -357,6 +347,23 @@ CONTAINS
     nc%LEN_DIM(1) = LEN_DIM_1
     nc%LEN_DIM(2) = LEN_DIM_2
 
+    if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
+      nc%starts(1) = PAR%io_out_nx0
+      nc%starts(2) = PAR%io_out_ny0
+
+      nc%counts(1) = PAR%io_out_nx1-PAR%io_out_nx0+1
+      nc%counts(2) = PAR%io_out_ny1-PAR%io_out_ny0+1
+    else if(LEN_DIM_1 == C%NLON .and. LEN_DIM_2 == C%NLAT) then
+      nc%starts(1) = PAR%io_out_nlon0
+      nc%starts(2) = PAR%io_out_nlat0
+
+      nc%counts(1) = PAR%io_out_nlon1-PAR%io_out_nlon0+1
+      nc%counts(2) = PAR%io_out_nlat1-PAR%io_out_nlat0+1
+    else
+      write(*,*) ' [ x] From oblimap_open_netcdf_file(): LEN_DIM_1 /= NX|NLON or LEN_DIM_2 /= NY|NLAT'
+      call MPI_Abort(MPI_COMM_WORLD, -1)
+    endif
+
     if(C%nc_parallel_mode) then
       if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
         call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
@@ -378,15 +385,6 @@ CONTAINS
                          , coordinates_dimension_2_1D &
                          , coordinates_dimension_2_1D_ &
                          , coordinates_dimension_2_1D_win, PAR%shared_comm)
-
-        nc%starts(1) = PAR%nx0
-        nc%starts(2) = PAR%ny0
-        nc%starts(3) = 1
-
-        nc%counts(1) = PAR%nx1-PAR%nx0+1
-        nc%counts(2) = PAR%ny1-PAR%ny0+1
-        nc%counts(3) = 1
-
       elseif(LEN_DIM_1 == C%NLON .and. LEN_DIM_2 == C%NLAT) then
         call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
                          , C%NLAT, par%nlat0, par%nlat1 &
@@ -407,28 +405,11 @@ CONTAINS
                          , coordinates_dimension_2_1D &
                          , coordinates_dimension_2_1D_ &
                          , coordinates_dimension_2_1D_win, PAR%shared_comm)
-
-        nc%starts(1) = par%nlon0
-        nc%starts(2) = par%nlat0
-        nc%starts(3) = 1
-
-        nc%counts(1) = par%nlon1-par%nlon0+1
-        nc%counts(2) = par%nlat1-par%nlat0+1
-        nc%counts(3) = 1
-
       else
         write(*,*) ' [ x] From oblimap_create_netcdf_file(): (LEN_DIM_1 /= NX or LEN_DIM_2 /= NY) or (LEN_DIM_1 /= NLON or LEN_DIM_2 /= NLAT)'
         call MPI_Abort(MPI_COMM_WORLD, -1)
       endif
     else
-      if(PAR%rank_shared == 0) then
-        nc%starts = 1
-        nc%counts = nc%LEN_DIM
-      else
-        nc%starts = nc%LEN_DIM
-        nc%counts = 0
-      endif
-
       allocate(coordinates_dimension_1_2D(LEN_DIM_1, LEN_DIM_2))
       allocate(coordinates_dimension_2_2D(LEN_DIM_1, LEN_DIM_2))
       allocate(coordinates_dimension_1_1D(LEN_DIM_1           ))
@@ -481,14 +462,8 @@ CONTAINS
      include_vertical_dimension = .FALSE.
      nc%LEN_DIM(3)              = 1                             ! To save a waste of allocation and computational time in case C%number_of_vertical_layers is initiated to a higher number
     END IF
+    nc%starts(3) = 1
     nc%counts(3) = nc%LEN_DIM(3)
-    if(.not. C%nc_parallel_mode) then
-      if(PAR%rank_shared == 0) then
-        nc%counts(3) = nc%LEN_DIM(3)
-      else
-        nc%counts = 0
-      endif
-    endif
 
     CALL check_file_existence(nc%file_name)
 

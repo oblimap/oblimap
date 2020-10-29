@@ -98,6 +98,41 @@ PROGRAM oblimap_par_im_to_gcm_program
   PAR%nlon1 = C%NLON
 #endif
 
+  ! in nc_parallel_mode, each proc of each node will read a portion of the whole array
+  ! and write its local subarray.
+  if(C%nc_parallel_mode) then
+      call decompose(C%NX, PAR%nshared_procs, PAR%rank_shared, PAR%io_in_nx0, PAR%io_in_nx1)
+      PAR%io_out_nx0 = PAR%nx0
+      PAR%io_out_nx1 = PAR%nx1
+
+      call decompose(C%NLON, PAR%nshared_procs, PAR%rank_shared, PAR%io_in_nlon0, PAR%io_in_nlon1)
+      PAR%io_out_nlon0 = PAR%nlon0
+      PAR%io_out_nlon1 = PAR%nlon1
+  else
+    ! in not nc_parallel_mode, only the 0 of the node will read the whole array and write the portion of the node
+    if(PAR%rank_shared == 0) then
+      PAR%io_in_nx0 = 1
+      PAR%io_in_nx1 = C%NX
+      PAR%io_out_nx0 = PAR%node_nx0
+      PAR%io_out_nx1 = PAR%node_nx1
+
+      PAR%io_in_nlon0 = 1
+      PAR%io_in_nlon1 = C%NLON
+      PAR%io_out_nlon0 = PAR%node_nlon0
+      PAR%io_out_nlon1 = PAR%node_nlon1
+    else
+      PAR%io_in_nx0 = C%NX
+      PAR%io_in_nx1 = C%NX-1 ! - io_in_nx0+1 == counts (be equal 0)
+      PAR%io_out_nx0 = C%NX
+      PAR%io_out_nx1 = C%NX-1
+
+      PAR%io_in_nlon0 = C%NLON
+      PAR%io_in_nlon1 = C%NLON-1
+      PAR%io_out_nlon0 = C%NLON
+      PAR%io_out_nlon1 = C%NLON-1
+    endif
+  endif
+
 #ifdef CONFIG_Y_DECOMP
   call decompose(C%NY, PAR%n_nodes, PAR%rank_inter, PAR%node_ny0, PAR%node_ny1)
   call decompose(PAR%node_ny0, PAR%node_ny1, PAR%nshared_procs, PAR%rank_shared, PAR%ny0, PAR%ny1)
@@ -111,6 +146,38 @@ PROGRAM oblimap_par_im_to_gcm_program
   PAR%nlat0 = 1
   PAR%nlat1 = C%NLAT
 #endif
+
+  if(C%nc_parallel_mode) then
+    call decompose(C%NY, PAR%nshared_procs, PAR%rank_shared, PAR%io_in_ny0, PAR%io_in_ny1)
+    PAR%io_out_ny0 = PAR%ny0
+    PAR%io_out_ny1 = PAR%ny1
+
+    call decompose(C%NLAT, PAR%nshared_procs, PAR%rank_shared, PAR%io_in_nlat0, PAR%io_in_nlat1)
+    PAR%io_out_nlat0 = PAR%nlat0
+    PAR%io_out_nlat1 = PAR%nlat1
+  else
+    if(PAR%rank_shared == 0) then
+      PAR%io_in_ny0 = 1
+      PAR%io_in_ny1 = C%NY
+      PAR%io_out_ny0 = PAR%node_ny0
+      PAR%io_out_ny1 = PAR%node_ny1
+
+      PAR%io_in_nlat0 = 1
+      PAR%io_in_nlat1 = C%NLAT
+      PAR%io_out_nlat0 = PAR%node_nlat0
+      PAR%io_out_nlat1 = PAR%node_nlat1
+    else
+      PAR%io_in_ny0 = C%NY
+      PAR%io_in_ny1 = C%NY-1
+      PAR%io_out_ny0 = C%NY
+      PAR%io_out_ny1 = C%NY-1
+
+      PAR%io_in_nlat0 = C%NLAT
+      PAR%io_in_nlat1 = C%NLAT-1
+      PAR%io_out_nlat0 = C%NLAT
+      PAR%io_out_nlat1 = C%NLAT-1
+    endif
+  endif
 
 #if (defined CONFIG_X_DECOMP && defined CONFIG_Y_DECOMP)
 #error "CONFIG_X_DECOMP and CONFIG_Y_DECOMP are not compatible (yet)"

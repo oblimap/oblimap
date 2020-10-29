@@ -321,6 +321,16 @@ MODULE oblimap_configuration_module
         integer :: node_nlon0, node_nlon1
         integer :: node_nlat0, node_nlat1
 
+        ! ranges for reading (io_in_*) or for writing (io_out_*) nc files
+        integer :: io_in_nx0,   io_in_nx1
+        integer :: io_in_ny0,   io_in_ny1
+        integer :: io_in_nlon0, io_in_nlon1
+        integer :: io_in_nlat0, io_in_nlat1
+        integer :: io_out_nx0,   io_out_nx1
+        integer :: io_out_ny0,   io_out_ny1
+        integer :: io_out_nlon0, io_out_nlon1
+        integer :: io_out_nlat0, io_out_nlat1
+
       END TYPE parallel_type
 
       ! PAR is the 'struct' containing the parallel OBLIMAP implementation using MPI.
