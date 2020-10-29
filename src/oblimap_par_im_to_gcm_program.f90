@@ -75,21 +75,46 @@ PROGRAM oblimap_par_im_to_gcm_program
   END IF
 
   ! 1D decomposition
+#ifndef CONFIG_X_DECOMP
+!! by default, decompose in X direction
+#define CONFIG_X_DECOMP
+#endif
+
+#ifdef CONFIG_X_DECOMP
+  call decompose(C%NX, PAR%nshared_procs, PAR%rank_shared, PAR%nx0, PAR%nx1)
+
+  call decompose(C%NLON, PAR%nshared_procs, PAR%rank_shared, PAR%nlon0, PAR%nlon1)
+#else
+  PAR%nx0 = 1
+  PAR%nx1 = C%NX
+
+  PAR%nlon0 = 1
+  PAR%nlon1 = C%NLON
+#endif
+
+#ifdef CONFIG_Y_DECOMP
+  call decompose(C%NY, PAR%nshared_procs, PAR%rank_shared, PAR%ny0, PAR%ny1)
+
+  call decompose(C%NLAT, PAR%nshared_procs, PAR%rank_shared, PAR%nlat0, PAR%nlat1)
+#else
   PAR%ny0 = 1
   PAR%ny1 = C%NY
 
-  call decompose(C%NX, PAR%nshared_procs, PAR%rank_shared, PAR%nx0, PAR%nx1)
-
   PAR%nlat0 = 1
   PAR%nlat1 = C%NLAT
+#endif
 
-  call decompose(C%NLON, PAR%nshared_procs, PAR%rank_shared, PAR%nlon0, PAR%nlon1)
+#if (defined CONFIG_X_DECOMP && defined CONFIG_Y_DECOMP)
+#error "CONFIG_X_DECOMP and CONFIG_Y_DECOMP are not compatible (yet)"
+#endif
 
   IF(PAR%rank == 0) THEN
    ! Output: -
    CALL oblimap_licence('oblimap_gcm_to_im_program')
 
-   WRITE(UNIT=*,FMT='(4(A, I4)/)') '  OBLIMAP-PAR runs with: number_of_processors  = ', PAR%nprocs , ', NLON = ', C%NLON, ', max_nr_of_lines_per_partition_block = ', PAR%nlon1-PAR%nlon0, ', load unbalance = ', PAR%nprocs * (PAR%nlon1-PAR%nlon0) - C%nlon
+   WRITE(UNIT=*,FMT='(1(A, I4)/)') '  OBLIMAP-PAR(shared) runs with: number_of_processors  = ', PAR%nprocs
+   WRITE(UNIT=*,FMT='(2(A, I4)/)') ', NLON = ', C%NLON, ', max_nr_of_lines_per_partition_block = ', PAR%nlon1-PAR%nlon0, ', load unbalance = ', PAR%nprocs * (PAR%nlon1-PAR%nlon0) - C%nlon
+   WRITE(UNIT=*,FMT='(2(A, I4)/)') ', NLAT = ', C%NLAT, ', max_nr_of_columns_per_partition_block = ', PAR%nlat1-PAR%nlat0, ', load unbalance = ', PAR%nprocs * (PAR%nlat1-PAR%nlat0) - C%NLAT
   END IF
 
   ! Calling the oblimap_im_to_gcm_mapping :
