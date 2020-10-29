@@ -313,6 +313,14 @@ MODULE oblimap_configuration_module
         type(MPI_COMM) :: shared_comm
         integer :: rank, nprocs
         integer :: rank_shared, nshared_procs
+        ! multi-node variables
+        type(MPI_COMM) :: inter_comm
+        integer :: rank_inter, n_nodes ! ninter_procs
+        integer :: node_nx0,   node_nx1
+        integer :: node_ny0,   node_ny1
+        integer :: node_nlon0, node_nlon1
+        integer :: node_nlat0, node_nlat1
+
       END TYPE parallel_type
 
       ! PAR is the 'struct' containing the parallel OBLIMAP implementation using MPI.

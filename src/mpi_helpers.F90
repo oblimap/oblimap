@@ -6,6 +6,11 @@ module mpi_helpers_mod
   private
 
   public :: decompose
+  interface decompose
+    module procedure :: decompose_range
+    module procedure :: decompose_size
+  end interface decompose
+
   public :: alloc_shared
   interface alloc_shared
     module procedure alloc_shared_1d_dp
@@ -23,14 +28,14 @@ contains
   !! decompose N amongst M procs for proc p:
   !! n: number of elements
   !! s: starting index
-  subroutine decompose(N, M, p, n0, n1)
+  subroutine decompose_range(S, N, M, p, n0, n1)
     implicit none
-    integer, intent(in) :: N, M, p
+    integer, intent(in) :: S, N, M, p
     integer, intent(inout) :: n0, n1
     integer :: n_, q_, r_
 
-     q_ = N / M ;
-     r_ = mod(N, M) ! N - (INT(N/M) * M) ;
+     q_ = (N-S+1) / M ;
+     r_ = mod((N-S+1), M) ! N - (INT(N/M) * M) ;
      if (r_ > p) then
              n_ = q_ + 1
              n0 = q_ * p + p
@@ -38,9 +43,17 @@ contains
              n_ = q_
              n0 = q_ * p + r_
      endif
-     n1 = n0 + n_
-     n0 = n0 + 1 !from n0:n1
-  end subroutine decompose
+     n1 = n0 + n_ + S -1
+     n0 = n0 + S !from n0:n1
+  end subroutine decompose_range
+
+  subroutine decompose_size(N, M, p, n0, n1)
+    implicit none
+    integer, intent(in) :: N, M, p
+    integer, intent(inout) :: n0, n1
+
+    call decompose_range(1, N, M, p, n0, n1)
+  end subroutine decompose_size
 
   subroutine alloc_shared_1d_dp( nx, x0, x1 &
                                , a_sm, a_, a_win, shared_comm)

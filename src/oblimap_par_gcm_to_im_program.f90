@@ -64,6 +64,10 @@ PROGRAM oblimap_gcm_to_im_program
   call MPI_COMM_RANK(PAR%shared_comm, PAR%rank_shared, ierror)
   call MPI_COMM_SIZE(PAR%shared_comm, PAR%nshared_procs, ierror)
 
+  call MPI_Comm_split(MPI_COMM_WORLD, PAR%rank_shared, 0, PAR%inter_comm)
+  call MPI_Comm_rank(PAR%inter_comm, PAR%rank_inter)
+  call MPI_Comm_size(PAR%inter_comm, PAR%n_nodes)
+
   ! Read the configuration file and initialization of the struckt C%:
   CALL initialize_config_variables()
 
@@ -81,9 +85,11 @@ PROGRAM oblimap_gcm_to_im_program
 #endif
 
 #ifdef CONFIG_X_DECOMP
-  call decompose(C%NX, PAR%nshared_procs, PAR%rank_shared, PAR%nx0, PAR%nx1)
+  call decompose(C%NX, PAR%n_nodes, PAR%rank_inter, PAR%node_nx0, PAR%node_nx1)
+  call decompose(PAR%node_nx0, PAR%node_nx1, PAR%nshared_procs, PAR%rank_shared, PAR%nx0, PAR%nx1)
 
-  call decompose(C%NLON, PAR%nshared_procs, PAR%rank_shared, PAR%nlon0, PAR%nlon1)
+  call decompose(C%NLON, PAR%n_nodes, PAR%rank_inter, PAR%node_nlon0, PAR%node_nlon1)
+  call decompose(PAR%node_nlon0, PAR%node_nlon1, PAR%nshared_procs, PAR%rank_shared, PAR%nlon0, PAR%nlon1)
 #else
   PAR%nx0 = 1
   PAR%nx1 = C%NX
@@ -93,9 +99,11 @@ PROGRAM oblimap_gcm_to_im_program
 #endif
 
 #ifdef CONFIG_Y_DECOMP
-  call decompose(C%NY, PAR%nshared_procs, PAR%rank_shared, PAR%ny0, PAR%ny1)
+  call decompose(C%NY, PAR%n_nodes, PAR%rank_inter, PAR%node_ny0, PAR%node_ny1)
+  call decompose(PAR%node_ny0, PAR%node_ny1, PAR%nshared_procs, PAR%rank_shared, PAR%ny0, PAR%ny1)
 
-  call decompose(C%NLAT, PAR%nshared_procs, PAR%rank_shared, PAR%nlat0, PAR%nlat1)
+  call decompose(C%NLAT, PAR%n_nodes, PAR%rank_inter, PAR%node_nlat0, PAR%node_nlat1)
+  call decompose(PAR%node_nlat0, PAR%node_nlat1, PAR%nshared_procs, PAR%rank_shared, PAR%nlat0, PAR%nlat1)
 #else
   PAR%ny0 = 1
   PAR%ny1 = C%NY
@@ -113,9 +121,10 @@ PROGRAM oblimap_gcm_to_im_program
    CALL oblimap_licence('oblimap_gcm_to_im_program')
 
    WRITE(UNIT=*,FMT='(1(A, I4)/)') '  OBLIMAP-PAR(shared) runs with: number_of_processors  = ', PAR%nprocs
-   WRITE(UNIT=*,FMT='(2(A, I4)/)') ', NX = ', C%NX, ', max_nr_of_lines_per_partition_block = ', PAR%nx1-PAR%nx0, ', load unbalance = ', PAR%nprocs * (PAR%nx1-PAR%Nx0) - C%NX
-   WRITE(UNIT=*,FMT='(2(A, I4)/)') ', NY = ', C%NY, ', max_nr_of_columns_per_partition_block = ', PAR%ny1-PAR%ny0, ', load unbalance = ', PAR%nprocs * (PAR%ny1-PAR%ny0) - C%NY
   END IF
+
+  WRITE(UNIT=*,FMT='(3I4,3(A, I4))') PAR%rank, PAR%rank_inter, PAR%rank_shared, ', NX = ', C%NX, ', max_nr_of_lines_per_partition_block = ', PAR%nx1-PAR%nx0, ', load unbalance = ', PAR%nprocs * (PAR%nx1-PAR%Nx0) - C%NX
+  WRITE(UNIT=*,FMT='(3I4,3(A, I4))') PAR%rank, PAR%rank_inter, PAR%rank_shared, ', NY = ', C%NY, ', max_nr_of_columns_per_partition_block = ', PAR%ny1-PAR%ny0, ', load unbalance = ', PAR%nprocs * (PAR%ny1-PAR%ny0) - C%NY
 
   ! Calling the oblimap_gcm_to_im_mapping :
   CALL oblimap_gcm_to_im_mapping()
