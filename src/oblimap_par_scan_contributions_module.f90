@@ -955,13 +955,13 @@ CONTAINS
     maximum_contributions          = maximum_contributions_reduced
 
     ! Output: -
-    IF(PAR%rank_shared == 0) &
+    IF(PAR%rank == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions, gcm_to_im_direction = .TRUE.)
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
     DO process_counter = 0, PAR%nprocs - 1
-     IF(process_counter == PAR%rank_shared) THEN
+     IF(process_counter == PAR%rank) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
      !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
