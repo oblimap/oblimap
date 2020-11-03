@@ -72,6 +72,7 @@ MODULE oblimap_mapping_module
     REAL(dp), DIMENSION(:,:), pointer :: distance                  ! The distances of the contributing departure points to each considered destination grid point
 
     !! mpi shared structures
+    integer  :: node_mapped_points0, node_mapped_points1
     integer  :: total_mapped_points0, total_mapped_points1
     integer , dimension(:  ), pointer :: row_index_destination_
     integer , dimension(:  ), pointer :: column_index_destination_
@@ -372,7 +373,10 @@ CONTAINS
     READ(UNIT=unit_number, FMT='(A  )') end_of_line
    !WRITE(UNIT=*, FMT='(2(A, I12))') ' Number of mapped points is: ', ddo%total_mapped_points, ', maximum amount of contributions for one mapped point = ', ddo%maximum_contributions
 
-    call decompose(ddo%total_mapped_points, PAR%nshared_procs, PAR%rank_shared, ddo%total_mapped_points0, ddo%total_mapped_points1)
+    !call decompose(ddo%total_mapped_points, PAR%nshared_procs, PAR%rank_shared, ddo%total_mapped_points0, ddo%total_mapped_points1)
+    call decompose(ddo%total_mapped_points, PAR%n_nodes, PAR%rank_inter, ddo%node_mapped_points0, ddo%node_mapped_points1)
+    call decompose(ddo%node_mapped_points0, ddo%node_mapped_points1, PAR%nshared_procs, PAR%rank_shared, ddo%total_mapped_points0, ddo%total_mapped_points1)
+
     WRITE(UNIT=*, FMT='(A, I12, A, I12, I12, A, I12))') ' Number of mapped points is: ', ddo%total_mapped_points, ':', ddo%total_mapped_points0, ddo%total_mapped_points1, ', maximum amount of contributions for one mapped point = ', ddo%maximum_contributions
     call alloc_shared( ddo%total_mapped_points &
                      , ddo%total_mapped_points0 &
