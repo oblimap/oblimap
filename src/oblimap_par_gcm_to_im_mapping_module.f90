@@ -116,29 +116,31 @@ CONTAINS
     type(MPI_Win) :: mask_of_invalid_contributions_win
     type(MPI_Win) :: gcm_field_win
     type(MPI_Win) :: im_field_win
+    ! FIXME for testing
+    integer :: p, row, col
 
     ! TODO allocate lon_gcm
     ! TODO allocate lat_gcm
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , lon_gcm, lon_gcm_ &
                      , lon_gcm_win &
                      , PAR%shared_comm)
 
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , lat_gcm, lat_gcm_ &
                      , lat_gcm_win &
                      , PAR%shared_comm)
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , x_coordinates_of_im_grid_points &
                      , x_coordinates_of_im_grid_points_ &
                      , x_coordinates_of_im_grid_points_win, PAR%shared_comm)
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , y_coordinates_of_im_grid_points &
                      , y_coordinates_of_im_grid_points_ &
                      , y_coordinates_of_im_grid_points_win, PAR%shared_comm)
@@ -181,7 +183,9 @@ CONTAINS
     ! point relative to the target point).
     IF(C%scanning_mode) THEN
      ! Output: advised_scan_parameter
+     call MPI_Barrier(PAR%shared_comm)
      CALL determining_scan_parameters('gcm-to-im', lon_gcm, lat_gcm, advised_scan_parameter)
+     call MPI_Barrier(PAR%shared_comm)
 
      IF(C%choice_quadrant_method) THEN
       ! Output: the C%sid_filename file is created
@@ -196,6 +200,18 @@ CONTAINS
     ! Output: oblimap_ddo
     CALL oblimap_read_sid_file(C%sid_filename, oblimap_ddo)
 
+    ! FIXME read only indices within nx0:nx1 and ny0:ny1
+    do p = oblimap_ddo%total_mapped_points0, oblimap_ddo%total_mapped_points1
+      row = oblimap_ddo%row_index_destination(p)
+      col = oblimap_ddo%column_index_destination(p)
+
+      if ( row < PAR%node_nx0 .or. row > PAR%node_nx1 .or. &
+           col < PAR%node_ny0 .or. col > PAR%node_ny1) then
+           write(*,'(a,i4,a,i8,a,i8,a)') 'WARNING: on ', PAR%rank, ' point (', row,' , ', col, ') will not be written well if multi-node run'
+      endif
+    end do
+
+
     ! The IM netcdf file is created, this file contains the IM fields which are mapped on the IM grid:
     ! Output: im_netcdf_file
     CALL create_netcdf_for_im_grid(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, gcm_netcdf_file, im_netcdf_file)
@@ -203,15 +219,15 @@ CONTAINS
     !allocate(mask_of_invalid_contributions(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
     !allocate(gcm_field(C%number_of_mapped_fields,C%NLON,C%NLAT,C%number_of_vertical_layers))
     !allocate( im_field(C%number_of_mapped_fields,C%NX  ,C%NY  ,C%number_of_vertical_layers))
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
                      , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
                      , mask_of_invalid_contributions, mask_of_invalid_contributions_ &
                      , mask_of_invalid_contributions_win &
                      , PAR%shared_comm)
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
                      , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
                      , gcm_field, gcm_field_ &

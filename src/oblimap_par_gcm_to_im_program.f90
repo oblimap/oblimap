@@ -198,8 +198,10 @@ PROGRAM oblimap_gcm_to_im_program
    WRITE(UNIT=*,FMT='(1(A, I4)/)') '  OBLIMAP-PAR(shared) runs with: number_of_processors  = ', PAR%nprocs
   END IF
 
-  WRITE(*,*) PAR%rank, PAR%rank_inter, PAR%rank_shared, PAR%node_nx0, PAR%node_nx1, PAR%nx0, PAR%nx1
-  WRITE(*,*) PAR%rank, PAR%rank_inter, PAR%rank_shared, PAR%node_ny0, PAR%node_ny1, PAR%ny0, PAR%ny1
+  WRITE(*,'(3i6,a,6i5)') PAR%rank, PAR%rank_inter, PAR%rank_shared, '  nx  ', PAR%io_in_nx0,   PAR%io_in_nx1,   PAR%io_out_nx0,   PAR%io_out_nx1,   PAR%nx0, PAR%nx1
+  WRITE(*,'(3i6,a,6i5)') PAR%rank, PAR%rank_inter, PAR%rank_shared, '  ny  ', PAR%io_in_ny0,   PAR%io_in_ny1,   PAR%io_out_ny0,   PAR%io_out_ny1,   PAR%ny0, PAR%ny1
+  WRITE(*,'(3i6,a,6i5)') PAR%rank, PAR%rank_inter, PAR%rank_shared, '  nlon', PAR%io_in_nlon0, PAR%io_in_nlon1, PAR%io_out_nlon0, PAR%io_out_nlon1, PAR%nlon0, PAR%nlon1
+  WRITE(*,'(3i6,a,6i5)') PAR%rank, PAR%rank_inter, PAR%rank_shared, '  nlat', PAR%io_in_nlat0, PAR%io_in_nlat1, PAR%io_out_nlat0, PAR%io_out_nlat1, PAR%nlat0, PAR%nlat1
   WRITE(UNIT=*,FMT='(3I4,3(A, I4))') PAR%rank, PAR%rank_inter, PAR%rank_shared, ', NX = ', C%NX, ', max_nr_of_lines_per_partition_block = ', PAR%nx1-PAR%nx0+1, ', load unbalance = ', PAR%nprocs * (PAR%nx1-PAR%Nx0+1) - C%NX
   WRITE(UNIT=*,FMT='(3I4,3(A, I4))') PAR%rank, PAR%rank_inter, PAR%rank_shared, ', NY = ', C%NY, ', max_nr_of_columns_per_partition_block = ', PAR%ny1-PAR%ny0+1, ', load unbalance = ', PAR%nprocs * (PAR%ny1-PAR%ny0+1) - C%NY
 

@@ -164,7 +164,8 @@ CONTAINS
 
     ! Open the netcdf file:
     CALL handle_error(nf90_open(nc%file_name, nf90_nowrite, nc%ncid &
-                               , comm=MPI_COMM_WORLD%MPI_VAL, info=MPI_INFO_NULL%MPI_VAL &
+                               !, comm=MPI_COMM_WORLD%MPI_VAL, info=MPI_INFO_NULL%MPI_VAL &
+                               , comm=PAR%shared_comm%MPI_VAL, info=MPI_INFO_NULL%MPI_VAL &
                                ),                                                                                           '. [ 1] From oblimap_open_netcdf_file(): The file '//TRIM(nc%file_name)//' is not found')
 
     CALL handle_error(nf90_inquire(ncid = nc%ncid, unlimitedDimID = unlimited_dimension_id),                                '. [ 2] From oblimap_open_netcdf_file(): it concerns the  file '//TRIM(nc%file_name))
@@ -226,8 +227,8 @@ CONTAINS
       CALL handle_error(nf90_get_var(nc%ncid, nc%id(-2), coordinates_dimension_1_1D),                                       '. [10] From oblimap_open_netcdf_file(): it concerns the dimension "'//TRIM(nc%field_name(-2))//'" in the file '//TRIM(nc%file_name))
 
       ! Creating from the one dimensional variable, the two dimensional one:
-      DO j = PAR%ny0, PAR%ny1
-        DO i = PAR%nx0, PAR%nx1
+      DO j = PAR%io_in_ny0, PAR%io_in_ny1
+        DO i = PAR%io_in_nx0, PAR%io_in_nx1
           coordinates_dimension_1(i,j) = coordinates_dimension_1_1D(i)
         END DO
       END DO
@@ -247,8 +248,8 @@ CONTAINS
       CALL handle_error(nf90_get_var(nc%ncid, nc%id(-4), coordinates_dimension_2_1D),                                       '. [14] From oblimap_open_netcdf_file(): it concerns the dimension "'//TRIM(nc%field_name(-4))//'" in the file '//TRIM(nc%file_name))
 
       ! Creating from the one dimensional variable, the two dimensional one:
-      DO j = PAR%ny0, PAR%ny1
-        DO i = PAR%nx0, PAR%nx1
+      DO j = PAR%io_in_ny0, PAR%io_in_ny1
+        DO i = PAR%io_in_nx0, PAR%io_in_nx1
           coordinates_dimension_2(i,j) = coordinates_dimension_2_1D(j)
         END DO
       END DO
@@ -366,42 +367,42 @@ CONTAINS
 
     if(C%nc_parallel_mode) then
       if(LEN_DIM_1 == C%NX .and. LEN_DIM_2 == C%NY) then
-        call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                         , C%NY, PAR%ny0, PAR%ny1 &
+        call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                         , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                          , coordinates_dimension_1_2D &
                          , coordinates_dimension_1_2D_ &
                          , coordinates_dimension_1_2D_win, PAR%shared_comm)
-        call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                         , C%NY, PAR%ny0, PAR%ny1 &
+        call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                         , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                          , coordinates_dimension_2_2D &
                          , coordinates_dimension_2_2D_ &
                          , coordinates_dimension_2_2D_win, PAR%shared_comm)
 
-        call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
+        call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
                          , coordinates_dimension_1_1D &
                          , coordinates_dimension_1_1D_ &
                          , coordinates_dimension_1_1D_win, PAR%shared_comm)
-        call alloc_shared( C%NY, PAR%ny0, PAR%ny1 &
+        call alloc_shared( C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                          , coordinates_dimension_2_1D &
                          , coordinates_dimension_2_1D_ &
                          , coordinates_dimension_2_1D_win, PAR%shared_comm)
       elseif(LEN_DIM_1 == C%NLON .and. LEN_DIM_2 == C%NLAT) then
-        call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
-                         , C%NLAT, par%nlat0, par%nlat1 &
+        call alloc_shared( C%NLON, par%io_in_nlon0, par%io_in_nlon1 &
+                         , C%NLAT, par%io_in_nlat0, par%io_in_nlat1 &
                          , coordinates_dimension_1_2D &
                          , coordinates_dimension_1_2D_ &
                          , coordinates_dimension_1_2D_win, PAR%shared_comm)
-        call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
-                         , C%NLAT, par%nlat0, par%nlat1 &
+        call alloc_shared( C%NLON, par%io_in_nlon0, par%io_in_nlon1 &
+                         , C%NLAT, par%io_in_nlat0, par%io_in_nlat1 &
                          , coordinates_dimension_2_2D &
                          , coordinates_dimension_2_2D_ &
                          , coordinates_dimension_2_2D_win, PAR%shared_comm)
 
-        call alloc_shared( C%NLON, par%nlon0, par%nlon1 &
+        call alloc_shared( C%NLON, par%io_in_nlon0, par%io_in_nlon1 &
                          , coordinates_dimension_1_1D &
                          , coordinates_dimension_1_1D_ &
                          , coordinates_dimension_1_1D_win, PAR%shared_comm)
-        call alloc_shared( C%NLAT, par%nlat0, par%nlat1 &
+        call alloc_shared( C%NLAT, par%io_in_nlat0, par%io_in_nlat1 &
                          , coordinates_dimension_2_1D &
                          , coordinates_dimension_2_1D_ &
                          , coordinates_dimension_2_1D_win, PAR%shared_comm)
@@ -724,8 +725,8 @@ CONTAINS
      CALL oblimap_read_im_coordinates_from_netcdf_file(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points)
     ELSE
      ! TODO profile original loop
-     DO n = PAR%ny0, PAR%ny1
-       DO m = PAR%nx0, PAR%nx1
+     DO n = PAR%io_in_ny0, PAR%io_in_ny1
+       DO m = PAR%io_in_nx0, PAR%io_in_nx1
          x_coordinates_of_im_grid_points(m,n) = dx * (m - ((NX+1) / 2.0))
          y_coordinates_of_im_grid_points(m,n) = dy * (n - ((NY+1) / 2.0))
        END DO
@@ -950,7 +951,7 @@ CONTAINS
        counts(1:3) = nc%counts(1:3)
        counts(4)   = 1
        write_field(nx0:nx1, ny0:ny1, nz0:nz1) = fields(nx0:nx1,ny0:ny1,nz0:nz1,field_counter)
-       write(*,*) PAR%rank_shared, '. [2] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
+       write(*,*) PAR%rank, '. [2] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
                , starts(1:4), 'count', counts(1:4)
        CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,:), start=starts(1:4), count=counts(1:4)), &
         '. [2] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
@@ -961,7 +962,7 @@ CONTAINS
        counts(1) = nc%counts(1)
        counts(2)   = 1
        write_field(nx0:nx1, 1, 1) = fields(nx0:nx1,1,1,field_counter)
-       write(*,*) PAR%rank_shared, '. [3] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
+       write(*,*) PAR%rank, '. [3] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
                , starts(1:2), 'count', counts(1:2)
        CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,1,1), start=starts(1:2), count=counts(1:2)), &
         '. [3] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
@@ -972,7 +973,7 @@ CONTAINS
        counts(1:2) = nc%counts(1:2)
        counts(3)   = 1
        write_field(nx0:nx1, ny0:ny1, 1) = fields(nx0:nx1,ny0:ny1,1,field_counter)
-       write(*,*) PAR%rank_shared, '. [4] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
+       write(*,*) PAR%rank, '. [4] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
                , starts(1:3), 'count', counts(1:3)
        CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,1), start=starts(1:3), count=counts(1:3)), &
         '. [4] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
@@ -983,7 +984,7 @@ CONTAINS
        starts(1:3) = nc%starts(1:3)
        counts(1:3) = nc%counts(1:3)
        write_field(nx0:nx1, ny0:ny1, nz0:nz1) = fields(nx0:nx1,ny0:ny1,nz0:nz1,field_counter)
-       write(*,*) PAR%rank_shared, '. [5] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
+       write(*,*) PAR%rank, '. [5] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
                , starts(1:3), 'count', counts(1:3)
        CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,:), start=starts(1:3), count=counts(1:3)), &
         '. [5] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
@@ -992,7 +993,7 @@ CONTAINS
        starts(1) = nc%starts(1)
        counts(1) = nc%counts(1)
        write_field(nx0:nx1, 1, 1) = fields(nx0:nx1,1,1,field_counter)
-       write(*,*) PAR%rank_shared, '. [6] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
+       write(*,*) PAR%rank, '. [6] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
                , starts(1:1), 'count', counts(1:1)
        CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,1,1), start=starts(1:1), count=counts(1:1)), &
         '. [6] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)
@@ -1000,9 +1001,9 @@ CONTAINS
        ! 2D var
        starts(1:2) = nc%starts(1:2)
        counts(1:2) = nc%counts(1:2)
-       write(*,*) PAR%rank_shared, nx0, nx1, ny0, ny1
+       write(*,*) PAR%rank, nx0, nx1, ny0, ny1
        write_field(nx0:nx1, ny0:ny1, 1) = fields(nx0:nx1,ny0:ny1,1,field_counter)
-       write(*,*) PAR%rank_shared, '. [7] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
+       write(*,*) PAR%rank, '. [7] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter, 'start' &
                , starts(1:2), 'count', counts(1:2)
        CALL handle_error(nf90_put_var(nc%ncid, nc%id(field_counter), write_field(:,:,1), start=starts(1:2), count=counts(1:2)), &
         '. [7] From oblimap_write_netcdf_fields(): it concerns the field "'//TRIM(nc%field_name(field_counter))//'" in the file '//TRIM(nc%file_name)//', field number ', field_counter)

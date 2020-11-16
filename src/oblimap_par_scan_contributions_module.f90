@@ -139,14 +139,14 @@ CONTAINS
      latitude_parallel_to_grid_numbers = .FALSE.
     END IF
 
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , x_coordinates_of_gcm_grid_points &
                      , x_coordinates_of_gcm_grid_points_ &
                      , x_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
 
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , y_coordinates_of_gcm_grid_points &
                      , y_coordinates_of_gcm_grid_points_ &
                      , y_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
@@ -159,6 +159,7 @@ CONTAINS
     ! Projection of the GCM coordinates to the IM coordinates with the oblique stereographic projection:
     ! Output: x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points
     CALL projecting_the_gcm_lonlat_coordinates_to_xy(lon_gcm, lat_gcm, x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points)
+    call MPI_Barrier(PAR%shared_comm)
 
     no_contribution%distance     = C%large_distance
     no_contribution%row_index    = -1
@@ -176,9 +177,9 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%rank_shared
+    WRITE(process_label, '(I0.4)') PAR%rank
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank, FILE=filename_sid_content)
 
     m_start = PAR%nx0
     m_end = PAR%nx1
@@ -439,14 +440,14 @@ CONTAINS
        ! The nearest contribution is selected:
        nearest_contribution(m,n) = contribution(MINLOC(contribution(:,m,n)%distance, 1),m,n)
 
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
        DO loop = 1, 4
         ! Filter the appropriate contributions (leave out the quadrants in which no contributing point is found, e.g. at the grid border):
         IF(contribution(loop,m,n)%distance /= C%large_distance) THEN
-         WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
+         WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
         END IF
        END DO
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(A)') ''
        amount_of_mapped_points = amount_of_mapped_points + 1
       END IF
 
@@ -458,7 +459,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%rank_shared == 0) THEN
+    IF(PAR%rank == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -474,7 +475,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -490,13 +491,12 @@ CONTAINS
     number_points_no_contribution  = number_points_no_contribution_reduced
 
     ! Output: -
-    IF(PAR%rank_shared == 0) &
+    IF(PAR%rank == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions = 4, gcm_to_im_direction = .TRUE.)
-    CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
     DO process_counter = 0, PAR%nprocs - 1
-     IF(process_counter == PAR%rank_shared) THEN
+     IF(process_counter == PAR%rank) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
      !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
@@ -597,14 +597,14 @@ CONTAINS
      latitude_parallel_to_grid_numbers = .FALSE.
     END IF
 
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , x_coordinates_of_gcm_grid_points &
                      , x_coordinates_of_gcm_grid_points_ &
                      , x_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
 
-    call alloc_shared( C%NLON, PAR%nlon0, PAR%nlon1 &
-                     , C%NLAT, PAR%nlat0, PAR%nlat1 &
+    call alloc_shared( C%NLON, PAR%io_in_nlon0, PAR%io_in_nlon1 &
+                     , C%NLAT, PAR%io_in_nlat0, PAR%io_in_nlat1 &
                      , y_coordinates_of_gcm_grid_points &
                      , y_coordinates_of_gcm_grid_points_ &
                      , y_coordinates_of_gcm_grid_points_win, PAR%shared_comm)
@@ -628,6 +628,7 @@ CONTAINS
     ! Projection of the GCM coordinates to the IM coordinates with the oblique stereographic projection:
     ! Output: x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points
     CALL projecting_the_gcm_lonlat_coordinates_to_xy(lon_gcm, lat_gcm, x_coordinates_of_gcm_grid_points, y_coordinates_of_gcm_grid_points)
+    call MPI_Barrier(PAR%shared_comm)
 
     no_contribution%distance     = C%large_distance
     no_contribution%row_index    = -1
@@ -645,9 +646,9 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%rank_shared
+    WRITE(process_label, '(I0.4)') PAR%rank
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank, FILE=filename_sid_content)
 
     m_start = PAR%nx0
     m_end = PAR%nx1
@@ -901,11 +902,11 @@ CONTAINS
        ! The nearest contribution is selected:
        nearest_contribution(m,n) = contribution(MINLOC(contribution(:,m,n)%distance, 1),m,n)
 
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(3I6)', ADVANCE='NO') m, n, count_contributions
        DO loop = 1, count_contributions
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,m,n)%row_index, contribution(loop,m,n)%column_index, contribution(loop,m,n)%distance
        END DO
-       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
+       WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(A)') ''
        amount_of_mapped_points = amount_of_mapped_points + 1
       END IF
 
@@ -935,7 +936,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -957,7 +958,6 @@ CONTAINS
     ! Output: -
     IF(PAR%rank == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions, gcm_to_im_direction = .TRUE.)
-    CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
     DO process_counter = 0, PAR%nprocs - 1
@@ -1094,9 +1094,9 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%rank_shared
+    WRITE(process_label, '(I0.4)') PAR%rank
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank, FILE=filename_sid_content)
 
     i_start = PAR%nlon0
     i_end = PAR%nlon1
@@ -1256,14 +1256,14 @@ CONTAINS
         ! The nearest contribution is selected:
         nearest_contribution(i,j) = contribution(MINLOC(contribution(:,i,j)%distance, 1),i,j)
 
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
         DO loop = 1, 4
          ! Filter the appropriate contributions (leave out the quadrants in which no contributing point is found, e.g. at the grid border):
          IF(contribution(loop,i,j)%distance /= C%large_distance) THEN
-          WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
+          WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
          END IF
         END DO
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(A)') ''
         amount_of_mapped_points = amount_of_mapped_points + 1
        END IF
 
@@ -1294,7 +1294,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -1310,13 +1310,12 @@ CONTAINS
     number_points_no_contribution  = number_points_no_contribution_reduced
 
     ! Output: -
-    IF(PAR%rank_shared == 0) &
+    IF(PAR%rank == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions = 4, gcm_to_im_direction = .FALSE.)
-    CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
     DO process_counter = 0, PAR%nprocs - 1
-     IF(process_counter == PAR%rank_shared) THEN
+     IF(process_counter == PAR%rank) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
      !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
@@ -1452,9 +1451,9 @@ CONTAINS
 
     !!
     ! Opening the file to which the coordinates of the nearest projected points are written, which will be the content of the SID file:
-    WRITE(process_label, '(I0.4)') PAR%rank_shared
+    WRITE(process_label, '(I0.4)') PAR%rank
     filename_sid_content = TRIM(C%filename_sid_content)//'-'//TRIM(process_label)
-    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FILE=filename_sid_content)
+    OPEN(UNIT=C%unit_scanning_file_content + PAR%rank, FILE=filename_sid_content)
 
     i_start = PAR%nx0
     i_end = PAR%nx1
@@ -1609,11 +1608,11 @@ CONTAINS
         ! The nearest contribution is selected:
         nearest_contribution(i,j) = contribution(MINLOC(contribution(:,i,j)%distance, 1),i,j)
 
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(3I6)', ADVANCE='NO') i, j, count_contributions
         DO loop = 1, count_contributions
-         WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
+         WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(2I6,E23.15)', ADVANCE='NO') contribution(loop,i,j)%row_index, contribution(loop,i,j)%column_index, contribution(loop,i,j)%distance
         END DO
-        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank_shared, FMT='(A)') ''
+        WRITE(UNIT=C%unit_scanning_file_content + PAR%rank, FMT='(A)') ''
         amount_of_mapped_points = amount_of_mapped_points + 1
        END IF
 
@@ -1646,7 +1645,7 @@ CONTAINS
 
     !!
     ! Closing the the SID file:
-    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank_shared)
+    CLOSE(UNIT=C%unit_scanning_file_content + PAR%rank)
 
     ! In/Output: highest_scan_search_block_size_reduced
     CALL MPI_REDUCE (highest_scan_search_block_size,  highest_scan_search_block_size_reduced, 1, MPI_INTEGER , MPI_MAX , 0, MPI_COMM_WORLD , ierror)
@@ -1666,13 +1665,13 @@ CONTAINS
     maximum_contributions          = maximum_contributions_reduced
 
     ! Output: -
-    IF(PAR%rank_shared == 0) &
+    IF(PAR%rank == 0) &
      CALL write_sid_file(advised_scan_parameter, highest_scan_search_block_size, amount_of_mapped_points, number_points_no_contribution, maximum_contributions, gcm_to_im_direction = .FALSE.)
     CALL MPI_BARRIER(MPI_COMM_WORLD, ierror)
 
     ! Serialized output (still doesn't guarentee order):
     DO process_counter = 0, PAR%nprocs - 1
-     IF(process_counter == PAR%rank_shared) THEN
+     IF(process_counter == PAR%rank) THEN
       ! Appending the content to the header:
       CALL SYSTEM('cat '//TRIM(filename_sid_content)//' >> '//TRIM(C%sid_filename))
      !CALL SYSTEM('rm -f '//TRIM(C%filename_sid_content)//'-'//TRIM(PAR%rank_shared))
@@ -1857,32 +1856,32 @@ CONTAINS
     ! Output: x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j)
     SELECT CASE(C%choice_projection_method)
     CASE('oblique_stereographic_projection','oblique_stereographic_projection_snyder')
-      DO j = PAR%nlat0, PAR%nlat1
-        DO i = PAR%nlon0, PAR%nlon1
+      DO j = PAR%io_in_nlat0, PAR%io_in_nlat1
+        DO i = PAR%io_in_nlon0, PAR%io_in_nlon1
           CALL oblique_sg_projection(                                  lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
         END DO
       END DO
     CASE('oblique_stereographic_projection_ellipsoid_snyder')
-      DO j = PAR%nlat0, PAR%nlat1
-        DO i = PAR%nlon0, PAR%nlon1
+      DO j = PAR%io_in_nlat0, PAR%io_in_nlat1
+        DO i = PAR%io_in_nlon0, PAR%io_in_nlon1
           CALL oblique_sg_projection_ellipsoid_snyder(                 lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
         END DO
       END DO
     CASE('oblique_lambert_equal-area_projection_snyder')
-      DO j = PAR%nlat0, PAR%nlat1
-        DO i = PAR%nlon0, PAR%nlon1
+      DO j = PAR%io_in_nlat0, PAR%io_in_nlat1
+        DO i = PAR%io_in_nlon0, PAR%io_in_nlon1
           CALL oblique_laea_projection_snyder(                         lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
         END DO
       END DO
     CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
-      DO j = PAR%nlat0, PAR%nlat1
-        DO i = PAR%nlon0, PAR%nlon1
+      DO j = PAR%io_in_nlat0, PAR%io_in_nlat1
+        DO i = PAR%io_in_nlon0, PAR%io_in_nlon1
           CALL oblique_laea_projection_ellipsoid_snyder(               lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
         END DO
       END DO
     CASE('rotation_projection')
-      DO j = PAR%nlat0, PAR%nlat1
-        DO i = PAR%nlon0, PAR%nlon1
+      DO j = PAR%io_in_nlat0, PAR%io_in_nlat1
+        DO i = PAR%io_in_nlon0, PAR%io_in_nlon1
           CALL rotation_projection(                                    lon_gcm(i,j), lat_gcm(i,j), x_coordinates_of_gcm_grid_points(i,j), y_coordinates_of_gcm_grid_points(i,j))
         END DO
       END DO
@@ -1916,38 +1915,38 @@ CONTAINS
     ! Output: lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n)
     SELECT CASE(C%choice_projection_method)
     CASE('oblique_stereographic_projection')
-      DO n = PAR%ny0, PAR%ny1
-        DO m = PAR%nx0, PAR%nx1
+      DO n = PAR%io_in_ny0, PAR%io_in_ny1
+        DO m = PAR%io_in_nx0, PAR%io_in_nx1
           CALL inverse_oblique_sg_projection(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
         END DO
       END DO
     CASE('oblique_stereographic_projection_snyder')
-      DO n = PAR%ny0, PAR%ny1
-        DO m = PAR%nx0, PAR%nx1
+      DO n = PAR%io_in_ny0, PAR%io_in_ny1
+        DO m = PAR%io_in_nx0, PAR%io_in_nx1
           CALL inverse_oblique_sg_projection_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
         END DO
       END DO
     CASE('oblique_stereographic_projection_ellipsoid_snyder')
-      DO n = PAR%ny0, PAR%ny1
-        DO m = PAR%nx0, PAR%nx1
+      DO n = PAR%io_in_ny0, PAR%io_in_ny1
+        DO m = PAR%io_in_nx0, PAR%io_in_nx1
           CALL inverse_oblique_sg_projection_ellipsoid_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
         END DO
       END DO
     CASE('oblique_lambert_equal-area_projection_snyder')
-      DO n = PAR%ny0, PAR%ny1
-        DO m = PAR%nx0, PAR%nx1
+      DO n = PAR%io_in_ny0, PAR%io_in_ny1
+        DO m = PAR%io_in_nx0, PAR%io_in_nx1
           CALL inverse_oblique_laea_projection_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
         END DO
       END DO
     CASE('oblique_lambert_equal-area_projection_ellipsoid_snyder')
-      DO n = PAR%ny0, PAR%ny1
-        DO m = PAR%nx0, PAR%nx1
+      DO n = PAR%io_in_ny0, PAR%io_in_ny1
+        DO m = PAR%io_in_nx0, PAR%io_in_nx1
           CALL inverse_oblique_laea_projection_ellipsoid_snyder(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
         END DO
       END DO
     CASE('rotation_projection')
-      DO n = PAR%ny0, PAR%ny1
-        DO m = PAR%nx0, PAR%nx1
+      DO n = PAR%io_in_ny0, PAR%io_in_ny1
+        DO m = PAR%io_in_nx0, PAR%io_in_nx1
           CALL inverse_rotation_projection(x_coordinates_of_im_grid_points(m,n), y_coordinates_of_im_grid_points(m,n), lon_coordinates_of_im_grid_points(m,n), lat_coordinates_of_im_grid_points(m,n))
         END DO
       END DO
@@ -1997,8 +1996,8 @@ CONTAINS
     !  1. Specifying an alternative lon-lat im center (angles in degrees)
     !  2. Specifying a shift in the IM coordinates (shift in meter)
     !  3. A combination of these two ways
-     DO n = PAR%ny0, PAR%ny1
-       DO m = PAR%nx0, PAR%nx1
+     DO n = PAR%io_in_ny0, PAR%io_in_ny1
+       DO m = PAR%io_in_nx0, PAR%io_in_nx1
          !x_coordinates_of_im_grid_points = x_coordinates_of_im_grid_points + shift_x_coordinate + C%shift_x_coordinate_im_grid
          !y_coordinates_of_im_grid_points = y_coordinates_of_im_grid_points + shift_y_coordinate + C%shift_y_coordinate_im_grid
          x_coordinates_of_im_grid_points(m,n) = x_coordinates_of_im_grid_points(m,n) + shift_x_coordinate + C%shift_x_coordinate_im_grid
@@ -2440,8 +2439,8 @@ CONTAINS
 
     ! Checking if any points coincide with C, and shifting these coordinates if that is the case:
     ! TODO profile original loop
-    DO j = PAR%nlat0, PAR%nlat1
-    DO i = PAR%nlon0, PAR%nlon1
+    DO j = PAR%io_in_nlat0, PAR%io_in_nlat1
+    DO i = PAR%io_in_nlon0, PAR%io_in_nlon1
       IF(lat_gcm(i,j) == phi_C) THEN
        ! For the north and south pole any lambda is allowed because the longitude coordinate at the poles is often poorly defined:
        IF(lon_gcm(i,j) == lambda_C .OR. phi_C == 90._dp .OR. phi_C == -90._dp) THEN
