@@ -200,16 +200,30 @@ CONTAINS
     ! Output: oblimap_ddo
     CALL oblimap_read_sid_file(C%sid_filename, oblimap_ddo)
 
-    ! FIXME read only indices within nx0:nx1 and ny0:ny1
-    do p = oblimap_ddo%total_mapped_points0, oblimap_ddo%total_mapped_points1
+    ! TODO find a way to load the mapped points according to the parallel decomposition
+    ! this assume that the mapped points are sorted by paralllel proc (true by concatenate the sid file)
+    oblimap_ddo%total_mapped_points0=oblimap_ddo%total_mapped_points
+    oblimap_ddo%total_mapped_points1=1
+    do p = 1, oblimap_ddo%total_mapped_points
       row = oblimap_ddo%row_index_destination(p)
       col = oblimap_ddo%column_index_destination(p)
 
-      if ( row < PAR%node_nx0 .or. row > PAR%node_nx1 .or. &
-           col < PAR%node_ny0 .or. col > PAR%node_ny1) then
-           write(*,'(a,i4,a,i8,a,i8,a)') 'WARNING: on ', PAR%rank, ' point (', row,' , ', col, ') will not be written well if multi-node run'
+      if ( row >= PAR%nx0 .and. row <= PAR%nx1 .and. &
+           col >= PAR%ny0 .and. col <= PAR%ny1) then
+           oblimap_ddo%total_mapped_points0 = min(oblimap_ddo%total_mapped_points0, p)
+           oblimap_ddo%total_mapped_points1 = max(oblimap_ddo%total_mapped_points1, p)
       endif
     end do
+    !!! FIXME read only indices within nx0:nx1 and ny0:ny1
+    !!do p = oblimap_ddo%total_mapped_points0, oblimap_ddo%total_mapped_points1
+    !!  row = oblimap_ddo%row_index_destination(p)
+    !!  col = oblimap_ddo%column_index_destination(p)
+    !!
+    !!  if ( row < PAR%node_nx0 .or. row > PAR%node_nx1 .or. &
+    !!       col < PAR%node_ny0 .or. col > PAR%node_ny1) then
+    !!       write(*,'(a,i4,a,i8,a,i8,a)') 'WARNING: on ', PAR%rank, ' point (', row,' , ', col, ') will not be written well if multi-node run'
+    !!  endif
+    !!end do
 
 
     ! The IM netcdf file is created, this file contains the IM fields which are mapped on the IM grid:

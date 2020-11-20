@@ -145,6 +145,8 @@ CONTAINS
     type(MPI_Win) :: im_field_win
     type(MPI_Win) :: mapped_gcm_field_win
     type(MPI_Win) :: initial_gcm_field_win
+    ! FIXME for testing
+    integer :: p, row, col
 
     ! TODO allocate lon_gcm
     ! TODO allocate lat_gcm
@@ -243,22 +245,36 @@ CONTAINS
     ! Output: oblimap_ddo
     CALL oblimap_read_sid_file(C%sid_filename, oblimap_ddo)
 
-    ! FIXME read only indices within nx0:nx1 and ny0:ny1
-    do p = oblimap_ddo%total_mapped_points0, oblimap_ddo%total_mapped_points1
+    ! TODO find a way to load the mapped points according to the parallel decomposition
+    ! this assume that the mapped points are sorted by paralllel proc (true by concatenate the sid file)
+    oblimap_ddo%total_mapped_points0=oblimap_ddo%total_mapped_points
+    oblimap_ddo%total_mapped_points1=1
+    do p = 1, oblimap_ddo%total_mapped_points
       row = oblimap_ddo%row_index_destination(p)
       col = oblimap_ddo%column_index_destination(p)
 
-      if ( row < PAR%node_nlon0 .or. row > PAR%node_nlon1 .or. &
-           col < PAR%node_nlat0 .or. col > PAR%node_nlat1) then
-           write(*,'(a,i4,a,i8,a,i8,a)') 'WARNING: on ', PAR%rank, ' point (', row,' , ', col, ') will not be written well if multi-node run'
+      if ( row >= PAR%nlon0 .and. row <= PAR%nlon1 .and. &
+           col >= PAR%nlat0 .and. col <= PAR%nlat1) then
+           oblimap_ddo%total_mapped_points0 = min(oblimap_ddo%total_mapped_points0, p)
+           oblimap_ddo%total_mapped_points1 = max(oblimap_ddo%total_mapped_points1, p)
       endif
     end do
+    !!! FIXME read only indices within nx0:nx1 and ny0:ny1
+    !!do p = oblimap_ddo%total_mapped_points0, oblimap_ddo%total_mapped_points1
+    !!  row = oblimap_ddo%row_index_destination(p)
+    !!  col = oblimap_ddo%column_index_destination(p)
+
+    !!  if ( row < PAR%node_nlon0 .or. row > PAR%node_nlon1 .or. &
+    !!       col < PAR%node_nlat0 .or. col > PAR%node_nlat1) then
+    !!       write(*,'(a,i4,a,i8,a,i8,a)') 'WARNING: on ', PAR%rank, ' point (', row,' , ', col, ') will not be written well if multi-node run'
+    !!  endif
+    !!end do
 
     ! Output: -
     CALL create_netcdf_for_gcm_grid(lon_gcm, lat_gcm, im_netcdf_file, created_gcm_netcdf_file)
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , C%number_of_vertical_layers, 1, C%number_of_vertical_layers &
                      , C%number_of_mapped_fields, 1, C%number_of_mapped_fields &
                      , mask_of_invalid_contributions, mask_of_invalid_contributions_ &
