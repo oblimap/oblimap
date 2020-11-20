@@ -1062,14 +1062,14 @@ CONTAINS
 
     minimum_im_grid_distance = MIN(C%dx, C%dy)
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , lon_coordinates_of_im_grid_points &
                      , lon_coordinates_of_im_grid_points_ &
                      , lon_coordinates_of_im_grid_points_win, PAR%shared_comm)
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , lat_coordinates_of_im_grid_points &
                      , lat_coordinates_of_im_grid_points_ &
                      , lat_coordinates_of_im_grid_points_win, PAR%shared_comm)
@@ -1083,6 +1083,7 @@ CONTAINS
     ! Output: lon_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points
     CALL projecting_the_im_xy_coordinates_to_lonlat(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, &
                                                     lon_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points)
+    call MPI_Barrier(PAR%shared_comm)
 
     no_contribution%distance     = C%large_distance
     no_contribution%row_index    = -1
@@ -1407,14 +1408,14 @@ CONTAINS
     type(MPI_Win) :: lon_coordinates_of_im_grid_points_win
     type(MPI_Win) :: lat_coordinates_of_im_grid_points_win
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , lon_coordinates_of_im_grid_points &
                      , lon_coordinates_of_im_grid_points_ &
                      , lon_coordinates_of_im_grid_points_win, PAR%shared_comm)
 
-    call alloc_shared( C%NX, PAR%nx0, PAR%nx1 &
-                     , C%NY, PAR%ny0, PAR%ny1 &
+    call alloc_shared( C%NX, PAR%io_in_nx0, PAR%io_in_nx1 &
+                     , C%NY, PAR%io_in_ny0, PAR%io_in_ny1 &
                      , lat_coordinates_of_im_grid_points &
                      , lat_coordinates_of_im_grid_points_ &
                      , lat_coordinates_of_im_grid_points_win, PAR%shared_comm)
@@ -1440,6 +1441,7 @@ CONTAINS
     ! Output: lon_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points
     CALL projecting_the_im_xy_coordinates_to_lonlat(x_coordinates_of_im_grid_points, y_coordinates_of_im_grid_points, &
                                                     lon_coordinates_of_im_grid_points, lat_coordinates_of_im_grid_points)
+    call MPI_Barrier(PAR%shared_comm)
 
     no_contribution%distance     = C%large_distance
     no_contribution%row_index    = -1
