@@ -918,7 +918,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%rank_shared == 0) THEN
+    IF(PAR%rank == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -1279,7 +1279,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%rank_shared == 0) THEN
+    IF(PAR%rank == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
@@ -1629,7 +1629,7 @@ CONTAINS
 
     ! In/Output: cumulated_processor_time_reduced
     CALL MPI_REDUCE (cumulated_processor_time,  cumulated_processor_time_reduced, 1, MPI_DOUBLE_PRECISION , MPI_SUM , 0, MPI_COMM_WORLD , ierror)
-    IF(PAR%rank_shared == 0) THEN
+    IF(PAR%rank == 0) THEN
      INQUIRE(file='scan-phase-times.txt', exist=exist)
      IF(exist) THEN
       OPEN(7000, file='scan-phase-times.txt', status='old', position='append', action='write')
