@@ -52,6 +52,7 @@ PROGRAM oblimap_gcm_to_im_program
   IMPLICIT NONE
 
   INTEGER :: ierror
+  integer :: q_, r_
 
   ! Output: ierror
   CALL MPI_Init(ierror)
@@ -68,12 +69,17 @@ PROGRAM oblimap_gcm_to_im_program
    STOP
   END IF
 
-  IF(MOD(C%NX, PAR%number_of_processors) == 0) THEN
-   PAR%max_nr_of_lines_per_partition_block = (C%NX / PAR%number_of_processors)
+  q_ = C%NX/PAR%number_of_processors
+  r_ = mod(C%NX, PAR%number_of_processors)
+  if( r_ > PAR%processor_id_process_dependent) then
+    PAR%max_nr_of_lines_per_partition_block = q_ + 1
+    PAR%psi_process_dependent = PAR%processor_id_process_dependent * PAR%max_nr_of_lines_per_partition_block &
+                              + PAR%processor_id_process_dependent + 1
   ELSE
-   PAR%max_nr_of_lines_per_partition_block = (C%NX / PAR%number_of_processors) + 1
+    PAR%max_nr_of_lines_per_partition_block = q_
+    PAR%psi_process_dependent = PAR%processor_id_process_dependent * PAR%max_nr_of_lines_per_partition_block &
+                              + r_ + 1
   END IF
-  PAR%psi_process_dependent = PAR%processor_id_process_dependent * PAR%max_nr_of_lines_per_partition_block + 1
 
   IF(PAR%processor_id_process_dependent == 0) THEN
    ! Output: -
